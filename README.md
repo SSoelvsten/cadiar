@@ -26,6 +26,9 @@ Proving correctness of the core algorithms described in
 - Representation of Binary Decision Diagrams
   - [ ] Specification of ordering
   - [ ] Interpretation of list of nodes as the BDD DAG
+- Negation (with `map`)
+  - [ ] Correctness
+  - [ ] Time and I/O complexity
 - CountPaths
   - [ ] Correctness
   - [ ] Time and I/O complexity
