@@ -1,4 +1,4 @@
-# Adiar Cert
+# Cadiar : Certified Adiar
 
 This repository provides a formal verification of the core procedures in the
 I/O-efficient BDD package [Adiar](https://github.com/SSoelvsten/adiar). The
