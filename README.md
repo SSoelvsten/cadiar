@@ -3,7 +3,16 @@
 This repository provides a formal verification of the core procedures in the
 I/O-efficient BDD package [Adiar](https://github.com/SSoelvsten/adiar). The
 properties of the data structure and the algorithms were specified and proven
-inside of the [Isabelle](https://isabelle.in.tum.de/) proof assistant.
+inside of the [Isabelle](https://isabelle.in.tum.de/) proof assistant. This work
+reuses many of the ideas in [[Michaelis2016](#references)].
+
+## Usage
+
+1. Download the [Isabelle](https://isabelle.in.tum.de/) proof assistant and open
+   this folder at the root.
+
+2. Download the files for [[Michaelis2016](#references)] and place it in a
+   folder named _afp-robdd_ at the root.
 
 ## Roadmap
 
@@ -44,7 +53,13 @@ Proving correctness of the core algorithms described in
 
 ## References
 
+- [[Michaelis2016](https://isa-afp.org/entries/ROBDD.html)]
+  Julius Michaelis, Maximilian Haslbeck, Peter Lammich, and Lars Hupel.
+  “_Algorithms for Reduced Ordered Binary Decision Diagrams_”. In:
+  _Archive of Formal Proofs_ (2016)
+
 - [[Sølvsten2021](https://arxiv.org/abs/2104.12101)]
   Steffan Christ Sølvsten, Jaco van de Pol, Anna Blume Jakobsen, and Mathias
   Weller Berg Thomasen. “_Efficient Binary Decision Diagram Manipulation in
   External Memory_”. In: _arXiv_ (2021)
+
