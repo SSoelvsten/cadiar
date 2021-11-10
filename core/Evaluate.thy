@@ -66,3 +66,5 @@ next
   case 3
   with assms show ?thesis by auto
 qed
+
+end
