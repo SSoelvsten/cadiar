@@ -11,8 +11,11 @@ reuses many of the ideas in [[Michaelis2016](#references)].
 1. Download the [Isabelle](https://isabelle.in.tum.de/) proof assistant and open
    this folder at the root.
 
-2. Download the files for [[Michaelis2016](#references)] and place it in a
-   folder named _afp-robdd_ at the root.
+2. We are also dependent on [[Michaelis2016](#references)].
+
+   For this, download the entire [Archive of Formal
+   Proofs](https://www.isa-afp.org/download.html) and link Isabelle to it as
+   described [here](https://www.isa-afp.org/using.html).
 
 ## Roadmap
 
