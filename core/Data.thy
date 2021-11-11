@@ -4,6 +4,14 @@ imports Main
 begin
 
 datatype 'l uid = U (label:\<open>'l\<close>) (id:\<open>nat\<close>)
+
+instantiation uid :: (linorder) linorder
+begin
+fun less_uid where
+   \<open>less_uid (U i1 id1) (U i2 id2) = (i1 < i2 \<or> (i1 = i2 \<and> id1 < id2))\<close>
+instance sorry
+end
+
 datatype 'l ptr = Leaf \<open>bool\<close> | Node \<open>'l uid\<close>
 
 datatype 'l node = N (uid:\<open>'l uid\<close>) (low:\<open>'l ptr\<close>) (high:\<open>'l ptr\<close>)
