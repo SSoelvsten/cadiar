@@ -37,34 +37,25 @@ fun bdt_of_bdd :: \<open>'l bdd \<Rightarrow> 'l ifex\<close> where
 | \<open>bdt_of_bdd (Nodes (root#ns)) = bdt_of_bdd_aux (root#ns) (uid root)\<close>
 | \<open>bdt_of_bdd (Nodes []) = undefined\<close>
 
+
 lemma bdd_eval_aux_iff_val_ifex_aux:
   assumes \<open>well_formed_nl ns\<close> \<open>t \<in> uid ` set ns\<close>
   shows \<open>bdd_eval_aux ns a t \<longleftrightarrow> val_ifex (bdt_of_bdd_aux ns t) a\<close>
   using assms
-proof (induction ns arbitrary: t)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons n ns)
+proof (induction ns arbitrary: t rule: nl_induct)
+  case (Cons i t e ns)
   then show ?case
-    by (cases \<open>ns = []\<close>; cases n; auto split:ptr.splits)
-qed
+    by (cases \<open>ns = []\<close>; auto split:ptr.splits)
+qed simp
 
 theorem bdd_eval_iff_val_ifex:
   assumes \<open>well_formed bdd\<close>
   shows \<open>bdd_eval bdd a \<longleftrightarrow> val_ifex (bdt_of_bdd bdd) a\<close>
-proof (cases bdd rule: bdt_of_bdd.cases)
-  case (1 b)
-  then show ?thesis by auto
-next
-  case (2 root ns)
+proof (cases bdd rule: bdd_cases)
+  case (Nodes i t e ns)
   with assms show ?thesis
-    by (cases root)
-       (auto split:ptr.splits
+    by (auto split:ptr.splits
              dest:imageI[where f = uid] bdd_eval_aux_iff_val_ifex_aux[where a = a])
-next
-  case 3
-  with assms show ?thesis by auto
-qed
+qed (use assms in auto)
 
 end

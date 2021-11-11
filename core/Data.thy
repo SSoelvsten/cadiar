@@ -14,13 +14,36 @@ type_synonym 'l assignment = \<open>'l \<Rightarrow> bool\<close>
 
 fun well_formed_nl :: \<open>'l node list \<Rightarrow> bool\<close> where
   \<open>well_formed_nl []             = True\<close>
-| \<open>well_formed_nl (N _ l h # ns) = (well_formed_nl ns
-                                    \<and> (case l of Leaf b \<Rightarrow> True | Node l_uid \<Rightarrow> \<exists>n \<in> set ns . uid n = l_uid)
-                                    \<and> (case h of Leaf b \<Rightarrow> True | Node h_uid \<Rightarrow> \<exists>n \<in> set ns . uid n = h_uid))\<close>
+| \<open>well_formed_nl (N i t e # ns) = (well_formed_nl ns
+                                    \<and> (case t of Leaf b \<Rightarrow> True | Node l_uid \<Rightarrow> \<exists>n \<in> set ns . uid n = l_uid)
+                                    \<and> (case e of Leaf b \<Rightarrow> True | Node h_uid \<Rightarrow> \<exists>n \<in> set ns . uid n = h_uid))\<close>
+
+theorem nl_induct[case_names Nil Cons]:
+  fixes P :: "'a node list \<Rightarrow> bool"
+    and ns :: "'a node list"
+  assumes "P []"
+    and "\<And>i t e ns. P ns \<Longrightarrow> P (N i t e # ns)"
+  shows "P ns"
+  using assms by (rule Data.well_formed_nl.induct)
 
 fun well_formed :: \<open>'l bdd \<Rightarrow> bool\<close> where
   \<open>well_formed (Constant _) = True\<close>
 | \<open>well_formed (Nodes [])   = False\<close>
 | \<open>well_formed (Nodes ns)   = well_formed_nl ns\<close>
+
+
+fun bdd_cases where
+  Const: "bdd_cases (Constant b) = undefined"
+| Empty: "bdd_cases (Nodes [])   = undefined"
+| Nodes: "bdd_cases (Nodes (N i t e # ns)) = undefined"
+
+theorem bdd_cases:
+  fixes bdd :: "'c bdd"
+  obtains 
+      (Const) b :: "bool" where "bdd = Constant b"
+    | (Empty) "bdd = Nodes []"
+    | (Nodes) i :: "'c uid" and t :: "'c ptr" and e :: "'c ptr" and ns :: "'c node list"
+    where "bdd = Nodes (N i t e # ns)"
+  by (rule bdd_cases.cases)
 
 end
