@@ -1,6 +1,6 @@
 section\<open>Evaluate procedure\<close>
 theory Evaluate
-imports "../afp-robdd/BDT" Data
+imports ROBDD.BDT Data
 begin
 text \<open> Stream-like evaluation of Adiar's BDD representation \<close>
 
