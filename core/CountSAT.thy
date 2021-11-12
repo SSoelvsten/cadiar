@@ -3,18 +3,6 @@ theory CountSAT
 imports Data Evaluate "HOL-Library.Multiset"
 begin
 
-text \<open> 
-  TODO:
-   - Priority Queue (multi-set)
-   - Auxiliary functions:
-     - Forwarding to out-going edges of a node
-         return result_inc * PQ
-     - Combine all in-going to a node
-         return sum * levels * PQ
-     - While loop
-         return result
- \<close>
-
 datatype 'l pq_item = Request (target: \<open>'l uid\<close>) (sum: \<open>nat\<close>) (levels_visited: \<open>nat\<close>)
 
 instantiation pq_item :: (linorder) linorder
@@ -29,7 +17,7 @@ end
 type_synonym 'l pq = \<open>('l pq_item) multiset\<close>
 
 definition top :: \<open>('l :: linorder) pq \<Rightarrow> 'l pq_item option\<close> where
-  \<open>top pq = (if pq = {#} then None else Some (Min(set_mset pq)))\<close>
+  \<open>top pq = (if pq = {#} then None else Some (Min_mset pq))\<close>
 
 context
 fixes varcount :: nat
@@ -39,13 +27,40 @@ fun forward_paths :: \<open>'l pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Right
 | \<open>forward_paths pq (Leaf True)  s v = (2^(varcount - v), pq)\<close>
 | \<open>forward_paths pq (Node u)     s v = (0, {# Request u s v #} \<union># pq)\<close>
 
-fun combine_paths :: \<open>'l pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * 'l pq\<close> where
-  \<open>combine_paths pq t = undefined\<close>
+fun combine_paths_acc :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * 'l pq\<close> where
+  \<open>combine_paths_acc pq t (s_acc, v_acc) =
+    (case top pq of None                  \<Rightarrow> (s_acc, v_acc, pq)
+                  | Some (Request t' s v) \<Rightarrow> (if t' = t
+                                              then (let acc' = (s_acc * 2^(v-v_acc) + s, v)
+                                                      ; pq'  = (pq - {# Request t' s v #})
+                                                    in combine_paths_acc pq' t acc')
+                                              else (s_acc, v_acc, pq) ))\<close>
+
+text \<open> TODO: Proof termination based on size_of(pq) \<close>
+  
+fun combine_paths :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * 'l pq\<close> where
+  \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
+
+fun bdd_satcount_acc :: \<open>('l :: linorder) node list => 'l pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
+  \<open>bdd_satcount_acc [] pq result_acc =
+    (case top pq of None \<Rightarrow> result_acc
+                  | _    \<Rightarrow> undefined)\<close>
+| \<open>bdd_satcount_acc ((N i t e) # ns) pq result_acc =
+    (case top pq of None                   \<Rightarrow> result_acc
+                  | Some (Request tgt _ _) \<Rightarrow> (if i = target
+                                               then let (s, lvls, pq') = combine_paths pq tgt
+                                                      ; (rt, pq'') = forward_paths pq' t s (lvls+1)
+                                                      ; (re, pq''') = forward_paths pq'' e s (lvls+1)
+                                                     in bdd_satcount_acc ns pq''' (result_acc + rt + re)
+                                               else bdd_satcount_acc ns pq result_acc))\<close>
 
 fun bdd_satcount :: \<open>'l bdd \<Rightarrow> nat\<close> where
   \<open>bdd_satcount (Constant False)    = 0\<close>
 | \<open>bdd_satcount (Constant True)     = 2^varcount\<close>
-| \<open>bdd_satcount (Nodes (root # ns)) = undefined\<close>
+| \<open>bdd_satcount (Nodes ((N i t e) # ns)) =
+    (let (rt, pq)  = forward_paths {#} t 1 1
+       ; (re, pq') = forward_paths pq e 1 1
+     in bdd_satcount_acc ns pq' (rt + re))\<close>
 end
 
 end
