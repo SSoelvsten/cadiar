@@ -7,11 +7,18 @@ datatype 'l pq_item = Request (target: \<open>'l uid\<close>) (sum: \<open>nat\<
 
 instantiation pq_item :: (linorder) linorder
 begin
-fun less_pq_item where
-   \<open>less_pq_item (Request t1 s1 l1) (Request t2 s2 l2) = (t1 < t2
-                                     \<or> (t1 = t2 \<and> l1 < l2)
-                                     \<or> (t1 = t2 \<and> l1 = l2 \<and> s1 < s2))\<close>
-instance sorry
+
+definition less_pq_item where
+  \<open>less_pq_item \<equiv> \<lambda>(Request t1 s1 l1) \<Rightarrow> \<lambda>(Request t2 s2 l2) \<Rightarrow>
+    (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 < s2)\<close>
+
+definition less_eq_pq_item where
+  \<open>less_eq_pq_item \<equiv> \<lambda>(Request t1 s1 l1) \<Rightarrow> \<lambda>(Request t2 s2 l2) \<Rightarrow>
+    (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 < s2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 = s2)\<close>
+
+instance
+  by standard (auto simp: less_pq_item_def less_eq_pq_item_def split: pq_item.splits)
+
 end
 
 type_synonym 'l pq = \<open>('l pq_item) multiset\<close>
