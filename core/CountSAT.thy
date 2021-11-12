@@ -19,13 +19,22 @@ type_synonym 'l pq = \<open>('l pq_item) multiset\<close>
 definition top :: \<open>('l :: linorder) pq \<Rightarrow> 'l pq_item option\<close> where
   \<open>top pq = (if pq = {#} then None else Some (Min_mset pq))\<close>
 
+lemma top_in[termination_simp]:
+  "x \<in># pq" if "top pq = Some x"
+  by (metis Min_in finite_set_mset not_None_eq option.inject set_mset_eq_empty_iff that top_def)
+
 context
-fixes varcount :: nat
+  fixes varcount :: nat
 begin
 fun forward_paths :: \<open>'l pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat * 'l pq\<close> where
   \<open>forward_paths pq (Leaf False) s v = (0, pq)\<close>
 | \<open>forward_paths pq (Leaf True)  s v = (2^(varcount - v), pq)\<close>
 | \<open>forward_paths pq (Node u)     s v = (0, {# Request u s v #} \<union># pq)\<close>
+
+
+lemma size_Diff1_less_iff[termination_simp]:
+  "size (ms - {#x#}) < size ms \<longleftrightarrow> x \<in># ms"
+  by (metis diff_single_trivial less_irrefl size_Diff1_less)
 
 fun combine_paths_acc :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * 'l pq\<close> where
   \<open>combine_paths_acc pq t (s_acc, v_acc) =
@@ -36,8 +45,6 @@ fun combine_paths_acc :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Right
                                                     in combine_paths_acc pq' t acc')
                                               else (s_acc, v_acc, pq) ))\<close>
 
-text \<open> TODO: Proof termination based on size_of(pq) \<close>
-  
 fun combine_paths :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * 'l pq\<close> where
   \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
 
@@ -47,14 +54,14 @@ fun bdd_satcount_acc :: \<open>('l :: linorder) node list => 'l pq \<Rightarrow>
                   | _    \<Rightarrow> undefined)\<close>
 | \<open>bdd_satcount_acc ((N i t e) # ns) pq result_acc =
     (case top pq of None                   \<Rightarrow> result_acc
-                  | Some (Request tgt _ _) \<Rightarrow> (if i = target
+                  | Some (Request tgt _ _) \<Rightarrow> (if i = tgt
                                                then let (s, lvls, pq') = combine_paths pq tgt
                                                       ; (rt, pq'') = forward_paths pq' t s (lvls+1)
                                                       ; (re, pq''') = forward_paths pq'' e s (lvls+1)
                                                      in bdd_satcount_acc ns pq''' (result_acc + rt + re)
                                                else bdd_satcount_acc ns pq result_acc))\<close>
 
-fun bdd_satcount :: \<open>'l bdd \<Rightarrow> nat\<close> where
+fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
   \<open>bdd_satcount (Constant False)    = 0\<close>
 | \<open>bdd_satcount (Constant True)     = 2^varcount\<close>
 | \<open>bdd_satcount (Nodes ((N i t e) # ns)) =
