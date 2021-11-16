@@ -131,7 +131,7 @@ definition
   "num_assignments n bdd = card {a. bdd_eval bdd a \<and> dom_bounded n a}"
 
 definition
-  "num_assignments_nl n u ns = card {a. bdd_eval_aux ns a u \<and> dom_bounded n a}"
+  "num_assignments_nl n u ns = card {a. bdd_eval_node ns a u \<and> dom_bounded n a}"
 
 definition
   "num_assignments_nl_ptr n ptr ns = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
@@ -236,9 +236,9 @@ proof -
   have "?l = num_assignments_nl varcount i (N i t e # ns)"
     unfolding num_assignments_def num_assignments_nl_def by simp
   also have "\<dots> = card ?S"
-    unfolding num_assignments_nl_def bdd_eval_aux_Cons_alt num_assignments_nl_ptr_def by simp
+    unfolding num_assignments_nl_def bdd_eval_node_Cons_alt num_assignments_nl_ptr_def by simp
   also have "\<dots> = ?r"
-    unfolding num_assignments_nl_def bdd_eval_aux_Cons_alt num_assignments_nl_ptr_def 1
+    unfolding num_assignments_nl_def bdd_eval_node_Cons_alt num_assignments_nl_ptr_def 1
     by (subst card_Un_disjoint, rule finite, rule finite, rule disjoint)
        (simp add: \<open>?St = _\<close> \<open>card ?Se = _\<close> \<open>?Se' = _\<close>)
   finally show ?thesis .
