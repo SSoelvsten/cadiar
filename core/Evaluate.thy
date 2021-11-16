@@ -58,4 +58,16 @@ proof (cases bdd rule: bdd_cases)
              dest:imageI[where f = uid] bdd_eval_aux_iff_val_ifex_aux[where a = a])
 qed (use assms in auto)
 
+text \<open>Evaluation of pointers, this comes in handy later.\<close>
+fun bdd_eval_ptr :: \<open>'l node list \<Rightarrow> 'l assignment \<Rightarrow> 'l ptr \<Rightarrow> bool\<close> where
+  \<open>bdd_eval_ptr ns a (Leaf b) = b\<close>
+| \<open>bdd_eval_ptr ns a (Node t) = bdd_eval_aux ns a t\<close>
+
+lemma bdd_eval_aux_Cons_alt:
+  \<open>bdd_eval_aux (n#ns) a t = (if uid n = t
+                              then let child = (if a (label t) then high n else low n)
+                                   in bdd_eval_ptr ns a child
+                              else bdd_eval_aux ns a t)\<close>
+  unfolding bdd_eval_aux.simps by (simp split: ptr.splits)
+
 end
