@@ -59,9 +59,8 @@ context
 begin
 fun forward_paths :: \<open>'l pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat * 'l pq\<close> where
   \<open>forward_paths pq (Leaf False) s v = (0, pq)\<close>
-| \<open>forward_paths pq (Leaf True)  s v = (2^(varcount - v), pq)\<close>
-| \<open>forward_paths pq (Node u)     s v = (0, {# Request u s v #} \<union># pq)\<close>
-
+| \<open>forward_paths pq (Leaf True)  s v = (s * 2^(varcount - v), pq)\<close>
+| \<open>forward_paths pq (Node u)     s v = (0, add_mset (Request u s v) pq)\<close>
 
 lemma size_Diff1_less_iff[termination_simp]:
   "size (ms - {#x#}) < size ms \<longleftrightarrow> x \<in># ms"
@@ -138,6 +137,10 @@ definition
 
 
 subsection \<open>Properties of assignment counting\<close>
+
+lemma num_assignments_nl_ptr_Node_eq[simp]:
+  "num_assignments_nl_ptr n (Node u) ns = num_assignments_nl n u ns"
+  unfolding num_assignments_nl_ptr_def num_assignments_nl_def by simp
 
 lemma num_assignments_nl_ptr_alt_def:
   "num_assignments_nl_ptr n ptr ns = (
@@ -257,6 +260,10 @@ lemma num_pq_Mempty_eq_0[simp]:
   "num_pq ns {#} = 0"
   unfolding num_pq_def by simp
 
+lemma num_request_alt_def:
+  "num_request ns (Request u s l) = s * num_assignments_nl (varcount - l) u ns"
+  unfolding num_request_def by simp
+
 
 subsection \<open>Proving correctness of @{term bdd_satcount'}}\<close>
 
@@ -264,7 +271,7 @@ lemma forward_pathsE:
   obtains s' pq' where
     "forward_paths pq ptr s l = (s', pq')"
     "num_pq ns pq' + s' = num_pq ns pq + s * num_assignments_nl_ptr (varcount - l) ptr ns"
-  sorry
+  by (cases ptr rule: ptr_cases; simp add: num_assignments_nl_ptr_alt_def num_pq_def num_request_def)
 
 lemma bdd_satcount_acc'_correct:
   "bdd_satcount_acc' ns pq s = s + num_pq ns pq"
