@@ -26,7 +26,7 @@ fun well_formed_nl :: \<open>'l node list \<Rightarrow> bool\<close> where
                                     \<and> (case t of Leaf b \<Rightarrow> True | Node l_uid \<Rightarrow> \<exists>n \<in> set ns . uid n = l_uid)
                                     \<and> (case e of Leaf b \<Rightarrow> True | Node h_uid \<Rightarrow> \<exists>n \<in> set ns . uid n = h_uid))\<close>
 
-theorem nl_induct[case_names Nil Cons]:
+lemma nl_induct[case_names Nil Cons]:
   fixes P :: "'a node list \<Rightarrow> bool"
     and ns :: "'a node list"
   assumes "P []"
@@ -45,7 +45,7 @@ fun bdd_cases where
 | Empty: "bdd_cases (Nodes [])   = undefined"
 | Nodes: "bdd_cases (Nodes (N i t e # ns)) = undefined"
 
-theorem bdd_cases:
+lemma bdd_cases:
   fixes bdd :: "'c bdd"
   obtains 
       (Const) b :: "bool" where "bdd = Constant b"
@@ -53,5 +53,13 @@ theorem bdd_cases:
     | (Nodes) i :: "'c uid" and t :: "'c ptr" and e :: "'c ptr" and ns :: "'c node list"
     where "bdd = Nodes (N i t e # ns)"
   by (rule bdd_cases.cases)
+
+lemma ptr_cases:
+  fixes ptr :: "'a ptr"
+  obtains
+    (True)  "ptr = Leaf True"
+  | (False) "ptr = Leaf False"
+  | (Node)  u :: "'a uid" where "ptr = Node u"
+  by (cases ptr) auto
 
 end
