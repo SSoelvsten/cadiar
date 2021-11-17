@@ -136,6 +136,79 @@ definition
   "num_assignments_nl_ptr n ptr ns = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
 
 
+subsection \<open>Properties of bounded Boolean functions\<close>
+
+lemma dom_bounded_alt_def:
+  "dom_bounded n a \<longleftrightarrow> (\<forall>i. i \<notin> {0..<n} \<longrightarrow> a i = False)"
+  by blast
+
+lemma dom_bounded_0:
+  "dom_bounded (0::nat) a \<longleftrightarrow> a = (\<lambda>_. False)"
+  unfolding dom_bounded_alt_def by auto
+
+lemma dom_bounded_minus_1_iff:
+  "dom_bounded n a \<and> a (n - 1) = False \<longleftrightarrow> dom_bounded (n - 1) a" if "n > 0" for n :: nat
+proof -
+  have "{0..<n} = {0..<n-1} \<union> {n-1}"
+    using that by auto
+  show ?thesis
+    unfolding dom_bounded_alt_def \<open>{0..<n} = _\<close> by force
+qed
+
+lemma dom_bounded_Suc_iff:
+  "dom_bounded (Suc n) a \<longleftrightarrow> dom_bounded n a \<or> dom_bounded (Suc n) a \<and> a n"
+  unfolding dom_bounded_alt_def using less_Suc_eq by auto
+
+lemma card_dom_bounded_flip:
+  "card {a. dom_bounded (Suc n) a \<and> a n} = card {a. dom_bounded n a}"
+  apply (intro card_bij_eq[where f = "\<lambda>a. a(n := False)" and g = "\<lambda>a. a(n := True)"])
+  subgoal inj_on_f
+    by (smt (verit, del_insts) fun_upd_triv fun_upd_upd inj_onI mem_Collect_eq)
+  subgoal subs_A
+    by (auto split: if_split_asm simp: dom_bounded_alt_def)
+  subgoal inj_on_g
+    by (rule inj_onI)
+       (smt (z3) Diff_iff UNIV_I atLeastLessThan_iff fun_upd_triv
+            fun_upd_upd image_subset_iff mem_Collect_eq nat_less_le singletonD)
+  subgoal subs_B
+    by (auto split: if_split_asm simp: dom_bounded_alt_def)
+  subgoal finite_A \<comment> \<open>Finiteness\<close>
+    sorry
+  subgoal finite_B \<comment> \<open>Finiteness\<close>
+    by (rule inj_on_finite, rule inj_on_g, rule subs_B, rule finite_A)
+  done
+
+lemma card_dom_bounded:
+  "card {a. dom_bounded n a} = 2 ^ n"
+proof (induction n)
+  case 0
+  then show ?case
+    unfolding dom_bounded_0 by simp
+next
+  case (Suc n)
+  let ?S = "{a. dom_bounded (Suc n) a}"
+  and ?Sf = "{a. dom_bounded n a}" and ?St = "{a. dom_bounded (Suc n) a \<and> a n}"
+  have "?S = ?Sf \<union> ?St"
+    by (subst dom_bounded_Suc_iff) auto
+  have "?Sf \<inter> ?St = {}"
+    unfolding dom_bounded_alt_def by auto
+  have "card ?S = card ?Sf + card ?St"
+    unfolding \<open>?S = _\<close> apply (rule card_Un_disjoint)
+    subgoal \<comment> \<open>Finiteness\<close>
+      sorry
+    subgoal \<comment> \<open>Finiteness\<close>
+      sorry
+    by (rule \<open>?Sf \<inter> ?St = {}\<close>)
+  also have "\<dots> = card ?Sf + card ?Sf"
+    unfolding card_dom_bounded_flip ..
+  also have "\<dots> = 2 ^ n + 2 ^ n"
+    unfolding Suc.IH ..
+  also have "\<dots> = 2 ^ (Suc n)"
+    by simp
+  finally show ?case .
+qed
+
+
 subsection \<open>Properties of assignment counting\<close>
 
 lemma num_assignments_nl_ptr_Node_eq[simp]:
@@ -149,32 +222,17 @@ lemma num_assignments_nl_ptr_alt_def:
       | Leaf True  \<Rightarrow> 2 ^ n
       | Node u \<Rightarrow> num_assignments_nl n u ns
   )"
-  sorry
+  unfolding num_assignments_nl_ptr_def num_assignments_nl_def
+  by (simp split: ptr.splits bool.splits add: card_dom_bounded)
 
 lemma num_assignments_Const_True:
   "num_assignments n (Constant True) = 2 ^ n"
-  unfolding num_assignments_def apply simp
-  sorry
+  unfolding num_assignments_def by (simp add: card_dom_bounded)
 
 lemma num_assignments_Const_False:
   "num_assignments n (Constant False) = 0"
   unfolding num_assignments_def by simp
 
-
-subsection \<open>Properties of bounded Boolean functions\<close>
-
-lemma dom_bounded_alt_def:
-  "dom_bounded n a \<longleftrightarrow> (\<forall>i. i \<notin> {0..<n} \<longrightarrow> a i = False)"
-  by blast
-
-lemma dom_bounded_minus_1_iff:
-  "dom_bounded n a \<and> a (n - 1) = False \<longleftrightarrow> dom_bounded (n - 1) a" if "n > 0" for n :: nat
-proof -
-  have "{0..<n} = {0..<n-1} \<union> {n-1}"
-    using that by auto
-  show ?thesis
-    unfolding dom_bounded_alt_def \<open>{0..<n} = _\<close> by force
-qed
 
 subsection \<open>An additional well-formedness condition on BDDs\<close>
 
@@ -281,7 +339,6 @@ theorem bdd_satcount'_correct:
   assumes "well_formed bdd" "well_formed_nodes bdd"
   shows "bdd_satcount' bdd = num_assignments varcount bdd"
 proof (cases bdd rule: bdd_satcount'.cases)
-next
   case (3 i t e ns)
   obtain rt pq where 1:
     "forward_paths {#} t 1 1 = (rt, pq)"
