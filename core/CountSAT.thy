@@ -39,6 +39,9 @@ type_synonym 'l pq = \<open>('l pq_item) multiset\<close>
 definition top :: \<open>('l :: linorder) pq \<Rightarrow> 'l pq_item option\<close> where
   \<open>top pq = (if pq = {#} then None else Some (Min_mset pq))\<close>
 
+definition pop :: \<open>('l :: linorder) pq \<Rightarrow> 'l pq\<close> where
+  \<open>pop pq = (pq - {# Min_mset pq #})\<close>
+
 lemma top_in[termination_simp]:
   "x \<in># pq" if "top pq = Some x"
   by (metis Min_in finite_set_mset not_None_eq option.inject set_mset_eq_empty_iff that top_def)
@@ -102,18 +105,22 @@ fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
 
 subsection \<open>Simplified definition\<close>
 
-fun bdd_satcount_acc' :: \<open>('l :: linorder) node list => 'l pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
+function bdd_satcount_acc' :: \<open>('l :: linorder) node list => 'l pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
   \<open>bdd_satcount_acc' [] pq result_acc =
     (case top pq of None \<Rightarrow> result_acc
                   | _    \<Rightarrow> undefined)\<close>
 | \<open>bdd_satcount_acc' ((N i t e) # ns) pq result_acc =
     (case top pq of None                   \<Rightarrow> result_acc
-                  | Some (Request tgt _ v) \<Rightarrow> (if i = tgt
-                                               then let (s, lvls, pq') = (0, v, pq)\<^cancel>\<open>combine_paths pq tgt\<close>
+                  | Some (Request tgt s lvls) \<Rightarrow> (if i = tgt
+                                               then let pq' = pop pq
                                                       ; (rt, pq'') = forward_paths pq' t s (lvls+1)
                                                       ; (re, pq''') = forward_paths pq'' e s (lvls+1)
-                                                     in bdd_satcount_acc' ns pq''' (result_acc + rt + re)
+                                                     in bdd_satcount_acc' ((N i t e) # ns) pq''' (result_acc + rt + re)
                                                else bdd_satcount_acc' ns pq result_acc))\<close>
+  by pat_completeness auto
+
+termination
+  sorry
 
 fun bdd_satcount' :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
   \<open>bdd_satcount' (Constant False)    = 0\<close>
@@ -121,57 +128,61 @@ fun bdd_satcount' :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
 | \<open>bdd_satcount' (Nodes ((N i t e) # ns)) =
     (let (rt, pq)  = forward_paths {#} t 1 1
        ; (re, pq') = forward_paths pq e 1 1
-     in bdd_satcount_acc' ns pq' (rt + re))\<close>
+     in bdd_satcount_acc' ((N i t e) # ns) pq' (rt + re))\<close>
 
-abbreviation
-  "dom_bounded n a \<equiv> a ` (UNIV - {0..<n}) \<subseteq> {False}"
+definition
+  "dom_bounded n a \<equiv> a ` (UNIV - {n..<varcount}) \<subseteq> {False}"
 
 definition
   "num_assignments n bdd = card {a. bdd_eval bdd a \<and> dom_bounded n a}"
 
 definition
-  "num_assignments_nl n u ns = card {a. bdd_eval_node ns a u \<and> dom_bounded n a}"
+  "num_assignments_node n u ns = card {a. bdd_eval_node ns a u \<and> dom_bounded n a}"
 
 definition
-  "num_assignments_nl_ptr n ptr ns = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
+  "num_assignments_ptr n ptr ns = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
 
 
 subsection \<open>Properties of bounded Boolean functions\<close>
 
 lemma dom_bounded_alt_def:
-  "dom_bounded n a \<longleftrightarrow> (\<forall>i. i \<notin> {0..<n} \<longrightarrow> a i = False)"
-  by blast
+  "dom_bounded n a \<longleftrightarrow> (\<forall>i. i \<notin> {n..<varcount} \<longrightarrow> a i = False)"
+  unfolding dom_bounded_def by blast
 
-lemma dom_bounded_0:
-  "dom_bounded (0::nat) a \<longleftrightarrow> a = (\<lambda>_. False)"
-  unfolding dom_bounded_alt_def by auto
+lemma dom_bounded_max:
+  "dom_bounded (n::nat) a \<longleftrightarrow> a = (\<lambda>_. False)" if "n \<ge> varcount"
+  using that unfolding dom_bounded_alt_def by auto
 
-lemma dom_bounded_minus_1_iff:
-  "dom_bounded n a \<and> a (n - 1) = False \<longleftrightarrow> dom_bounded (n - 1) a" if "n > 0" for n :: nat
-proof -
-  have "{0..<n} = {0..<n-1} \<union> {n-1}"
-    using that by auto
-  show ?thesis
-    unfolding dom_bounded_alt_def \<open>{0..<n} = _\<close> by force
-qed
+lemma dom_bounded_plus_1_iff:
+  "dom_bounded n a \<and> a n = False \<longleftrightarrow> dom_bounded (n + 1) a" for n :: nat
+  unfolding dom_bounded_alt_def
+  apply auto
+  subgoal for i
+    apply (cases "i = n")
+     apply auto
+    done
+  done
 
 lemma dom_bounded_Suc_iff:
-  "dom_bounded (Suc n) a \<longleftrightarrow> dom_bounded n a \<or> dom_bounded (Suc n) a \<and> a n"
-  unfolding dom_bounded_alt_def using less_Suc_eq by auto
+  "dom_bounded n a \<longleftrightarrow> dom_bounded n a \<and> a n \<or> dom_bounded (Suc n) a"
+  unfolding dom_bounded_alt_def
+  apply auto
+  subgoal for i
+    by (cases "i = n") auto
+  done
 
 lemma card_dom_bounded_flip:
-  "card {a. dom_bounded (Suc n) a \<and> a n} = card {a. dom_bounded n a}"
+  "card {a. dom_bounded n a \<and> a n} = card {a. dom_bounded (Suc n) a}" if "n < varcount"
   apply (intro card_bij_eq[where f = "\<lambda>a. a(n := False)" and g = "\<lambda>a. a(n := True)"])
   subgoal inj_on_f
     by (smt (verit, del_insts) fun_upd_triv fun_upd_upd inj_onI mem_Collect_eq)
   subgoal subs_A
     by (auto split: if_split_asm simp: dom_bounded_alt_def)
   subgoal inj_on_g
-    by (rule inj_onI)
-       (smt (z3) Diff_iff UNIV_I atLeastLessThan_iff fun_upd_triv
-            fun_upd_upd image_subset_iff mem_Collect_eq nat_less_le singletonD)
+    apply (rule inj_onI)
+    by (smt (verit, del_insts) CountSAT.dom_bounded_alt_def Diff_iff atLeastLessThan_singleton fun_upd_triv fun_upd_upd insertCI ivl_diff less_Suc_eq_le mem_Collect_eq nat_less_le not_le)
   subgoal subs_B
-    by (auto split: if_split_asm simp: dom_bounded_alt_def)
+    by (auto split: if_split_asm simp: dom_bounded_alt_def that)
   subgoal finite_A \<comment> \<open>Finiteness\<close>
     sorry
   subgoal finite_B \<comment> \<open>Finiteness\<close>
@@ -179,18 +190,22 @@ lemma card_dom_bounded_flip:
   done
 
 lemma card_dom_bounded:
-  "card {a. dom_bounded n a} = 2 ^ n"
+  "card {a. dom_bounded (varcount - n) a} = 2 ^ n" if "n \<le> varcount"
+  using that
 proof (induction n)
   case 0
   then show ?case
-    unfolding dom_bounded_0 by simp
+    by (subst dom_bounded_max; simp)
 next
   case (Suc n)
-  let ?S = "{a. dom_bounded (Suc n) a}"
-  and ?Sf = "{a. dom_bounded n a}" and ?St = "{a. dom_bounded (Suc n) a \<and> a n}"
+  let ?n = "varcount - n" and ?n1 = "varcount - Suc n"
+  let ?S = "{a. dom_bounded ?n1 a}"
+  and ?Sf = "{a. dom_bounded ?n a}" and ?St = "{a. dom_bounded ?n1 a \<and> a ?n1}"
+  from \<open>Suc n \<le> varcount\<close> have [simp]: "Suc ?n1 = ?n"
+    by simp
   have "?S = ?Sf \<union> ?St"
     by (subst dom_bounded_Suc_iff) auto
-  have "?Sf \<inter> ?St = {}"
+  from \<open>Suc n \<le> varcount\<close> have "?Sf \<inter> ?St = {}"
     unfolding dom_bounded_alt_def by auto
   have "card ?S = card ?Sf + card ?St"
     unfolding \<open>?S = _\<close> apply (rule card_Un_disjoint)
@@ -200,108 +215,190 @@ next
       sorry
     by (rule \<open>?Sf \<inter> ?St = {}\<close>)
   also have "\<dots> = card ?Sf + card ?Sf"
-    unfolding card_dom_bounded_flip ..
+    using \<open>Suc n \<le> varcount\<close> by (simp add: card_dom_bounded_flip)
   also have "\<dots> = 2 ^ n + 2 ^ n"
-    unfolding Suc.IH ..
+    using \<open>Suc n \<le> varcount\<close> by (simp add: Suc.IH)
   also have "\<dots> = 2 ^ (Suc n)"
     by simp
   finally show ?case .
 qed
 
+lemma card_dom_bounded':
+  "card {a. dom_bounded n a} = 2 ^ (varcount - n)" if "n \<le> varcount"
+  using card_dom_bounded[of "varcount - n"] that by simp
+
 
 subsection \<open>Properties of assignment counting\<close>
 
-lemma num_assignments_nl_ptr_Node_eq[simp]:
-  "num_assignments_nl_ptr n (Node u) ns = num_assignments_nl n u ns"
-  unfolding num_assignments_nl_ptr_def num_assignments_nl_def by simp
+lemma num_assignments_ptr_Node_eq[simp]:
+  "num_assignments_ptr n (Node u) ns = num_assignments_node n u ns"
+  unfolding num_assignments_ptr_def num_assignments_node_def by simp
 
-lemma num_assignments_nl_ptr_alt_def:
-  "num_assignments_nl_ptr n ptr ns = (
+lemma num_assignments_ptr_alt_def:
+  "num_assignments_ptr n ptr ns = (
       case ptr of
         Leaf False \<Rightarrow> 0
-      | Leaf True  \<Rightarrow> 2 ^ n
-      | Node u \<Rightarrow> num_assignments_nl n u ns
-  )"
-  unfolding num_assignments_nl_ptr_def num_assignments_nl_def
-  by (simp split: ptr.splits bool.splits add: card_dom_bounded)
+      | Leaf True  \<Rightarrow> 2 ^ (varcount - n)
+      | Node u \<Rightarrow> num_assignments_node n u ns
+  )" if "n \<le> varcount"
+  using that unfolding num_assignments_ptr_def num_assignments_node_def
+  by (simp split: ptr.splits bool.splits add: card_dom_bounded')
 
-lemma num_assignments_Const_True:
-  "num_assignments n (Constant True) = 2 ^ n"
-  unfolding num_assignments_def by (simp add: card_dom_bounded)
+lemma num_assignments_Const_True[simp]:
+  "num_assignments n (Constant True) = 2 ^ (varcount - n)" if "n \<le> varcount"
+  using that unfolding num_assignments_def by (simp add: card_dom_bounded')
 
-lemma num_assignments_Const_False:
+lemma num_assignments_Const_False[simp]:
   "num_assignments n (Constant False) = 0"
   unfolding num_assignments_def by simp
 
+lemma num_assignments_ptr_leaf_eq_num_assignments[simp]:
+  "num_assignments_ptr n (Leaf b) ns = num_assignments n (Constant b)"
+  unfolding num_assignments_def num_assignments_ptr_def by simp
 
-subsection \<open>An additional well-formedness condition on BDDs\<close>
+lemma num_assignments_nodes_eq[simp]:
+  "num_assignments n (Nodes (N i t e # ns)) = num_assignments_node n i (N i t e # ns)"
+  unfolding num_assignments_def num_assignments_node_def by simp
 
-definition well_formed_node where
-  "well_formed_node \<equiv> \<lambda>N i t e \<Rightarrow>
-    (case t of Node i1 \<Rightarrow> label i < label i1 | _ \<Rightarrow> True)
-  \<and> (case t of Node i2 \<Rightarrow> label i < label i2 | _ \<Rightarrow> True)
-  "
-
-fun well_formed_nodes :: \<open>('l :: linorder) bdd \<Rightarrow> bool\<close> where
-  \<open>well_formed_nodes (Constant _) = True\<close>
-| \<open>well_formed_nodes (Nodes ns)   = list_all well_formed_node ns\<close>
+lemma num_assignments_restrict:
+  "num_assignments n bdd = num_assignments_vars bdd * 2 ^ (n - card (vars_of_bdd bdd))"
+  oops
 
 
 subsection \<open>The central property of recursive counting of assignments\<close>
 
-lemma num_assignments_split:
-  "num_assignments varcount (Nodes (N i t e # ns)) =
-   num_assignments_nl_ptr (varcount - 1) t ns + num_assignments_nl_ptr (varcount - 1) e ns"
-  (is "?l = ?r")
-  if "well_formed bdd" "well_formed_nodes bdd"
-proof -
-  \<comment> \<open>Need to prove these from the well-formedness assumptions\<close>
-  have "0 < varcount" "label i = varcount - 1"
-    sorry
-  have 1: "{a. (a (label i) \<longrightarrow>
-          bdd_eval_ptr ns a e \<and> dom_bounded varcount a) \<and>
-         (\<not> a (label i) \<longrightarrow>
-          bdd_eval_ptr ns a t \<and> dom_bounded varcount a)}
-  = {a. a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded varcount a}
-  \<union> {a. \<not> a (label i) \<and> bdd_eval_ptr ns a t \<and> dom_bounded varcount a}" (is "?S = ?Se \<union> ?St")
+lemma dom_bounded_upd_False:
+  "dom_bounded n (a(l := False))" if "dom_bounded n a"
+  using that unfolding dom_bounded_alt_def by auto
+
+lemma dom_bounded_upd_iff:
+  "dom_bounded n (a(l := b)) \<longleftrightarrow> dom_bounded n a" if "n \<le> l" "l < varcount"
+  using that unfolding dom_bounded_alt_def by auto
+
+lemma well_formed_nl_ConsD[intro?]:
+  \<open>well_formed_nl ns\<close> if \<open>well_formed_nl (n # ns)\<close>
+  using that unfolding well_formed_nl_def by (cases n, simp)
+
+lemma high_lb:
+  "ptr_lb (label (uid n)) (high n)" if "inc_labels (n # ns)"
+  using that by (cases n; simp)
+
+lemma low_lb:
+  "ptr_lb (label (uid n)) (low n)" if "inc_labels (n # ns)"
+  using that by (cases n; simp)
+
+lemma ptr_lb_trans:
+  "ptr_lb l n" if "ptr_lb k n" "(l :: 'a :: order) \<le> k"
+  using that unfolding ptr_lb_def by (auto split: ptr.splits)
+
+lemma
+  fixes ns :: "nat node list"
+  assumes "well_formed_nl ns"
+  shows bdd_eval_node_upd_iff:
+    "l < label u \<Longrightarrow> bdd_eval_node ns (a(l := b)) u = bdd_eval_node ns a u"
+  and bdd_eval_ptr_upd_iff:
+    "ptr_lb l ptr \<Longrightarrow> bdd_eval_ptr ns (a(l := b)) ptr = bdd_eval_ptr ns a ptr"
+  using assms
+proof (induction ns a u and ns a ptr rule: bdd_eval_node_bdd_eval_ptr.induct)
+  case (2 n ns a t)
+  from \<open>well_formed_nl (n # ns)\<close> have \<open>well_formed_nl ns\<close>
+    by (rule well_formed_nl_ConsD)
+  have [simp]: "(\<lambda>x. (x = l \<longrightarrow> b) \<and> (x \<noteq> l \<longrightarrow> a x)) = a(l:=b)" \<comment> \<open>XXX\<close>
     by auto
-  \<comment> \<open>Because \<open>e\<close> cannot refer to \<open>label i\<close>.\<close>
-  have "bdd_eval_ptr ns a e \<longleftrightarrow> bdd_eval_ptr ns (a(label i := b)) e" for a b
+  show ?case
+  proof (cases "uid n = t")
+    case True
+    moreover have "ptr_lb l (high n)" "ptr_lb l (low n)"
+      using \<open>well_formed_nl (n # ns)\<close> \<open>l < label t\<close> True
+      by (auto intro: ptr_lb_trans elim: high_lb low_lb dest!: inc_labels_if_well_formed_nl)
+    ultimately show ?thesis
+      using 2(3-) \<open>well_formed_nl ns\<close> by (simp add: 2(1))
+  next
+    case False
+    with 2(3-) \<open>well_formed_nl ns\<close> show ?thesis
+      by (simp add: 2(2))
+  qed
+qed (simp add: ptr_lb_def)+
+
+lemma dom_bounded_swap_var_card_eq:
+  "card {a. \<not> a l \<and> bdd_eval_ptr ns a t \<and> dom_bounded n a}
+ = card {a. bdd_eval_ptr ns a t \<and> dom_bounded (n + 1) a}"
+  if [simp]: "well_formed_nl ns" "ptr_lb l t" "ptr_lb n t"
+ and bounds: \<open>l < varcount\<close> \<open>n \<le> l\<close>
+  unfolding dom_bounded_plus_1_iff[symmetric]
+  apply simp
+  apply (intro card_bij_eq[where f = "\<lambda>a. a(l := a n,n := False)"
+                             and g = "\<lambda>a. a(n:= a l,l := False)"])
+  subgoal inj_on_f
+    apply (rule inj_onI)
+    apply simp
+    by (smt (z3) fun_upd_idem_iff fun_upd_twist fun_upd_upd)
+  subgoal subs_A
+    using bounds by (auto simp: dom_bounded_upd_iff bdd_eval_ptr_upd_iff)
+  subgoal inj_on_g
+    apply (rule inj_onI)
+    apply simp
+    by (smt (z3) fun_upd_idem_iff fun_upd_twist fun_upd_upd)
+  subgoal subs_B
+    using bounds by (auto simp: dom_bounded_upd_iff bdd_eval_ptr_upd_iff)
+  subgoal finite_A \<comment> \<open>Finiteness\<close>
     sorry
+  subgoal finite_B \<comment> \<open>Finiteness\<close>
+    \<^cancel>\<open>by (rule inj_on_finite, rule inj_on_g, assumption, rule subs_B, assumption, rule finite_A)\<close>
+    sorry
+  done
+
+lemma num_assignments_split:
+  "num_assignments_node n i (N i t e # ns) =
+   num_assignments_ptr (n + 1) t ns + num_assignments_ptr (n + 1) e ns"
+  (is "?l = ?r")
+  if "well_formed_nl (N i t e # ns)" and bounds: \<open>label i < varcount\<close> \<open>n \<le> label i\<close>
+proof -
+  have 1: "{a. (a (label i) \<longrightarrow>
+          bdd_eval_ptr ns a e \<and> dom_bounded n a) \<and>
+         (\<not> a (label i) \<longrightarrow>
+          bdd_eval_ptr ns a t \<and> dom_bounded n a)}
+  = {a. a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded n a}
+  \<union> {a. \<not> a (label i) \<and> bdd_eval_ptr ns a t \<and> dom_bounded n a}" (is "?S = ?Se \<union> ?St")
+    by auto
+  from \<open>well_formed_nl _\<close> \<open>n \<le> label i\<close> have [simp]:
+    "ptr_lb n t" "ptr_lb n e" "ptr_lb (label i) t" "ptr_lb (label i) e"
+    by (auto intro: ptr_lb_trans elim: high_lb low_lb dest!: inc_labels_if_well_formed_nl)
+  from \<open>well_formed_nl _\<close> have [simp]: "well_formed_nl ns"
+    by (rule well_formed_nl_ConsD)
+  have "bdd_eval_ptr ns (a(label i := b)) e \<longleftrightarrow> bdd_eval_ptr ns a e" for a b
+    by (rule bdd_eval_ptr_upd_iff; simp)
   then have "card ?Se
-      = card {a. \<not> a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded varcount a}" (is "_ = card ?Se'")
+      = card {a. \<not> a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded n a}" (is "_ = card ?Se'")
     apply (intro card_bij_eq[where f = "\<lambda>a. a(label i := False)" and g = "\<lambda>a. a(label i := True)"])
     subgoal inj_on_f
       by (smt (verit, del_insts) fun_upd_triv fun_upd_upd inj_onI mem_Collect_eq)
     subgoal subs_A
-      by (auto simp: \<open>label i = _\<close> split: if_split_asm)
+      by (auto split: if_split_asm intro: dom_bounded_upd_False)
     subgoal inj_on_g
       by (smt (verit, del_insts) fun_upd_triv fun_upd_upd inj_onI mem_Collect_eq)
     subgoal subs_B
-      by (auto simp: \<open>label i = _\<close> \<open>varcount > 0\<close> split: if_split_asm)
+      by (auto simp: bounds dom_bounded_upd_iff split: if_split_asm)
     subgoal finite_A \<comment> \<open>Finiteness\<close>
       sorry
     subgoal finite_B \<comment> \<open>Finiteness\<close>
       by (rule inj_on_finite, rule inj_on_g, assumption, rule subs_B, assumption, rule finite_A)
     done
-  have "?St = {a. bdd_eval_ptr ns a t \<and> dom_bounded (varcount - Suc 0) a}"
-    using dom_bounded_minus_1_iff[OF \<open>varcount > 0\<close>] \<open>label i = _\<close>
-    by simp (metis (no_types, hide_lams))
-  have "?Se' = {a. bdd_eval_ptr ns a e \<and> dom_bounded (varcount - Suc 0) a}"
-    using dom_bounded_minus_1_iff[OF \<open>varcount > 0\<close>] \<open>label i = _\<close>
-    by simp (metis (no_types, hide_lams))
+  have "card ?St = card {a. bdd_eval_ptr ns a t \<and> dom_bounded (n + 1) a}"
+    by (rule dom_bounded_swap_var_card_eq; simp add: bounds)
+  have "card ?Se' = card {a. bdd_eval_ptr ns a e \<and> dom_bounded (n + 1) a}"
+    by (rule dom_bounded_swap_var_card_eq; simp add: bounds)
   have disjoint: "?Se \<inter> ?St = {}"
     by auto
   have finite: "finite ?Se" "finite ?St" \<comment> \<open>Proofs of finiteness are annoying but routine.\<close>
     sorry
-  have "?l = num_assignments_nl varcount i (N i t e # ns)"
-    unfolding num_assignments_def num_assignments_nl_def by simp
-  also have "\<dots> = card ?S"
-    unfolding num_assignments_nl_def bdd_eval_node_Cons_alt num_assignments_nl_ptr_def by simp
+  have "?l = card ?S"
+    unfolding num_assignments_node_def num_assignments_ptr_def by simp
   also have "\<dots> = ?r"
-    unfolding num_assignments_nl_def bdd_eval_node_Cons_alt num_assignments_nl_ptr_def 1
-    by (subst card_Un_disjoint, rule finite, rule finite, rule disjoint)
-       (simp add: \<open>?St = _\<close> \<open>card ?Se = _\<close> \<open>?Se' = _\<close>)
+    unfolding num_assignments_node_def num_assignments_ptr_def 1
+    apply (subst card_Un_disjoint, rule finite, rule finite, rule disjoint)
+    apply (simp add: \<open>card ?St = _\<close> \<open>card ?Se = _\<close> \<open>card ?Se' = _\<close>)
+    done
   finally show ?thesis .
 qed
 
@@ -309,7 +406,7 @@ qed
 subsection \<open>Assigning an assignment count to priority queues\<close>
 
 definition
-  "num_request ns \<equiv> \<lambda>Request u s l \<Rightarrow> s * num_assignments_nl (varcount - l) u ns"
+  "num_request ns \<equiv> \<lambda>Request u s l \<Rightarrow> s * num_assignments_node l u ns"
 
 definition
   "num_pq ns pq \<equiv> \<Sum>r \<in># pq. num_request ns r"
@@ -319,47 +416,203 @@ lemma num_pq_Mempty_eq_0[simp]:
   unfolding num_pq_def by simp
 
 lemma num_request_alt_def:
-  "num_request ns (Request u s l) = s * num_assignments_nl (varcount - l) u ns"
+  "num_request ns (Request u s l) = s * num_assignments_node l u ns"
   unfolding num_request_def by simp
+
+lemma top_pop_split:
+  "pq = add_mset r (pop pq)" if "top pq = Some r"
+  using that unfolding pop_def top_def by (auto split: if_split_asm)
+
+lemma num_pq_top_pop_split:
+  "num_pq ns pq = num_pq ns (pop pq) + num_request ns r" if "top pq = Some r"
+  by (subst top_pop_split, rule that) (simp add: algebra_simps num_pq_def)
+
+lemma top_Min_target:
+  assumes "top pq = Some r"
+  shows "\<forall>r' \<in># pq. target r \<le> target r'"
+  using top_Min[OF assms] by (metis eq_iff less_eq_pq_item_simp less_imp_le pq_item.exhaust_sel)
 
 
 subsection \<open>Proving correctness of @{term bdd_satcount'}}\<close>
 
 lemma forward_pathsE:
+  assumes "l \<le> varcount"
   obtains s' pq' where
     "forward_paths pq ptr s l = (s', pq')"
-    "num_pq ns pq' + s' = num_pq ns pq + s * num_assignments_nl_ptr (varcount - l) ptr ns"
-  by (cases ptr rule: ptr_cases; simp add: num_assignments_nl_ptr_alt_def num_pq_def num_request_def)
+    "num_pq ns pq' + s' = num_pq ns pq + s * num_assignments_ptr l ptr ns"
+  using assms
+  by (cases ptr rule: ptr_cases; simp add: num_assignments_ptr_alt_def num_pq_def num_request_def)
+
+definition
+  "pq_wf ns pq \<equiv> target ` set_mset pq \<subseteq> uid ` set ns
+               \<and> (\<forall>r \<in># pq. levels_visited r \<le> label (target r))"
+
+lemma pq_wf_empty_nodes_iff:
+  "pq_wf [] pq \<longleftrightarrow> pq = {#}"
+  unfolding pq_wf_def by auto
+
+lemma pq_wf_empty:
+  "pq_wf ns {#}"
+  unfolding pq_wf_def by simp
+
+lemma bdd_eval_ptr_drop_node:
+  fixes n :: "('a :: linorder) node"
+  assumes "ptr_lb (label (uid n)) ptr"
+  shows "bdd_eval_ptr (n # ns) a ptr = bdd_eval_ptr ns a ptr"
+  using assms by (cases n; cases ptr; auto simp: ptr_lb_def)
+
+lemma num_assignments_ptr_drop_parent:
+  assumes "inc_labels (N i t e # ns)"
+  shows "num_assignments_ptr lvl e (N i t e # ns) = num_assignments_ptr lvl e ns"
+    and "num_assignments_ptr lvl t (N i t e # ns) = num_assignments_ptr lvl t ns"
+  using assms unfolding num_assignments_ptr_def by (simp add: bdd_eval_ptr_drop_node)+
+
+lemma num_assignments_node_drop:
+  "num_assignments_node lvl u (n # ns) = num_assignments_node lvl u ns" if "uid n \<noteq> u"
+  using that unfolding num_assignments_node_def by simp
+
+lemma num_pq_drop:
+  assumes "\<forall>r \<in># pq. target r \<noteq> i"
+  shows "num_pq (N i t e # ns) pq = num_pq ns pq"
+proof -
+  have "num_request (N i t e # ns) r = num_request ns r" if "r \<in># pq" for r
+    unfolding num_request_def using that assms
+    by (auto simp: num_assignments_node_drop split: pq_item.splits)
+  then show ?thesis
+    unfolding num_pq_def by (simp cong: image_mset_cong)
+qed
+
+definition nodes_bounded where
+  "nodes_bounded ns = (label ` uid ` set ns \<subseteq> {0..<varcount})"
+
+lemma forward_paths_pq_preserves_pq_wf:
+  assumes "forward_paths pq ptr s l = (s', pq')" "pq_wf ns pq"
+    "case ptr of Node u \<Rightarrow> u \<in> uid ` set ns \<and> l \<le> label u | _ \<Rightarrow> True"
+  shows "pq_wf ns pq'"
+  using assms by (cases ptr rule: ptr_cases; force simp: pq_wf_def)
+
+lemma pq_wf_pop:
+  "pq_wf ns (pop pq)" if "pq_wf ns pq"
+  using that unfolding pq_wf_def pop_def by (meson image_subset_iff in_diffD)
 
 lemma bdd_satcount_acc'_correct:
   "bdd_satcount_acc' ns pq s = s + num_pq ns pq"
-  sorry
+  if "pq_wf ns pq" "well_formed_nl ns" "nodes_bounded ns"
+  using that
+proof (induction ns pq s rule: bdd_satcount_acc'.induct)
+  case (1 pq result_acc)
+  then show ?case
+    by (auto split: option.splits simp: top_eq_None_iff pq_wf_empty_nodes_iff dest: top_in)
+next
+  case (2 i t e ns pq result_acc)
+  note IH_match = 2(1) and IH_no_match = 2(2)
+  show ?case
+  proof (cases "top pq")
+    case None
+    then show ?thesis
+      by simp (simp add: top_eq_None_iff)
+  next
+    case [simp]: (Some r)
+    obtain tgt s lvl where [simp]: "r = Request tgt s lvl"
+      by (cases r)
+    show ?thesis
+    proof (cases "tgt = i")
+      case [simp]: True
+      have bounds: "label i < varcount" "lvl \<le> label i"
+        using \<open>nodes_bounded (_ #_)\<close> \<open>pq_wf (_ #_) pq\<close> top_in[OF Some]
+        unfolding nodes_bounded_def well_formed_nl_def pq_wf_def
+        by auto
+      then have "Suc lvl \<le> varcount"
+        by simp
+      then obtain rt pq'' where rt:
+        "forward_paths (pop pq) t s (Suc lvl) = (rt, pq'')"
+        "num_pq (N i t e # ns) pq'' + rt =
+         num_pq (N i t e # ns) (pop pq) + s * num_assignments_ptr (Suc lvl) t (N i t e # ns)"
+        by (rule forward_pathsE[of "Suc lvl" "pop pq" t s "N i t e # ns"])
+      from \<open>Suc lvl \<le> _\<close> obtain re pq''' where re:
+        "forward_paths pq'' e s (Suc lvl) = (re, pq''')"
+        "num_pq (N i t e # ns) pq''' + re =
+         num_pq (N i t e # ns) pq'' + s * num_assignments_ptr (Suc lvl) e (N i t e # ns)"
+        by (rule forward_pathsE[of "Suc lvl" pq'' e s "N i t e # ns"])
+      have "pq_wf (N i t e # ns) pq'''"
+        using re(1) rt(1) \<open>pq_wf _ pq\<close> \<open>well_formed_nl (_ # _)\<close> bounds
+        by (elim forward_paths_pq_preserves_pq_wf pq_wf_pop)
+           (auto 4 4 simp: ptr_lb_def split: ptr.splits
+                     dest: inc_labels_if_well_formed_nl closed_if_well_formed_nl)
+      moreover have "rt + (re + num_pq (N i t e # ns) pq''') = num_pq (N i t e # ns) pq"
+        (is "?l = ?r")
+      proof -
+        let ?n = "Suc lvl" and ?ns = "(N i t e # ns)"
+        have "?l = s * num_assignments_ptr ?n e ?ns + num_pq (N i t e # ns) (pop pq)
+                 + s * num_assignments_ptr ?n t ?ns"
+          using rt(2) re(2) by simp
+        also have "\<dots> = s * (num_assignments_ptr ?n e ?ns + num_assignments_ptr ?n t ?ns)
+                      + num_pq (N i t e # ns) (pop pq)"
+          by algebra
+        also have "\<dots> = s * (num_assignments_ptr ?n e ns + num_assignments_ptr ?n t ns)
+                      + num_pq (N i t e # ns) (pop pq)"
+          using \<open>well_formed_nl ?ns\<close>
+          by (simp del: inc_labels.simps add: num_assignments_ptr_drop_parent)
+        also have "\<dots> = s * (num_assignments_node lvl i ?ns) + num_pq (N i t e # ns) (pop pq)"
+          using bounds \<open>well_formed_nl (_ # ns)\<close> by (simp add: num_assignments_split)
+        also have "\<dots> = ?r"
+          by (simp add: num_request_def True num_pq_top_pop_split)
+        finally show ?thesis .
+      qed
+      ultimately show ?thesis
+        using \<open>well_formed_nl (_ # ns)\<close> \<open>nodes_bounded (_ # ns)\<close>
+        by (subst bdd_satcount_acc'.simps)
+           (auto simp del: bdd_satcount_acc'.simps simp add: rt(1) re(1) IH_match)
+    next
+      case False
+      have i_not_in_pq: "\<forall>r \<in># pq. target r \<noteq> i"
+      proof -
+        from \<open>pq_wf _ pq\<close> Some \<open>r = _\<close> have "tgt \<in> uid ` set (N i t e # ns)"
+          by (metis image_subset_iff pq_item.sel(1) pq_wf_def top_in)
+        moreover from \<open>well_formed_nl (_ # ns)\<close> have \<open>sorted (N i t e # ns)\<close> ..
+        ultimately have "i \<le> tgt"
+          apply safe
+          subgoal for x
+            by (cases x) fastforce
+          done
+        then show ?thesis
+          using top_Min_target[OF Some] False \<open>r = _\<close> by auto
+      qed
+      have "num_pq (N i t e # ns) pq = num_pq ns pq"
+        using i_not_in_pq by (auto intro!: num_pq_drop)
+      moreover have "pq_wf ns pq"
+        using \<open>pq_wf _ pq\<close> i_not_in_pq
+        unfolding pq_wf_def
+        by auto
+      moreover from \<open>well_formed_nl (_ # ns)\<close> have "well_formed_nl ns" ..
+      moreover from \<open>nodes_bounded (_ # ns)\<close> have "nodes_bounded ns"
+        unfolding nodes_bounded_def by auto
+      ultimately show ?thesis
+        using False by (simp add: IH_no_match)
+    qed
+  qed
+qed
 
 theorem bdd_satcount'_correct:
-  assumes "well_formed bdd" "well_formed_nodes bdd"
-  shows "bdd_satcount' bdd = num_assignments varcount bdd"
+  assumes "well_formed bdd" "case bdd of Nodes ns \<Rightarrow> nodes_bounded ns | _ \<Rightarrow> True"
+  shows "bdd_satcount' bdd = num_assignments 0 bdd"
 proof (cases bdd rule: bdd_satcount'.cases)
-  case (3 i t e ns)
-  obtain rt pq where 1:
-    "forward_paths {#} t 1 1 = (rt, pq)"
-    "num_pq ns pq + rt = num_pq ns {#} + 1 * num_assignments_nl_ptr (varcount - 1) t ns"
-    by (rule forward_pathsE[of "{#}" t 1 1 ns])
-  obtain re pq' where 2:
-    "forward_paths pq e 1 1 = (re, pq')"
-    "num_pq ns pq' + re = num_pq ns pq + 1 * num_assignments_nl_ptr (varcount - 1) e ns"
-    by (rule forward_pathsE)
-  have "bdd_satcount' bdd = bdd_satcount_acc' ns pq' (rt + re)"
-    using 1 2 by (simp add: \<open>bdd = _\<close>)
-  also have "\<dots> = rt + re + num_pq ns pq'"
-    by (rule bdd_satcount_acc'_correct)
-  also have "\<dots> = num_assignments_nl_ptr (varcount - 1) t ns + num_assignments_nl_ptr (varcount - 1) e ns"
-    using 1(2) 2(2) by simp
-  also have "\<dots> = num_assignments varcount (Nodes (N i t e # ns))"
-    using assms by (rule num_assignments_split[symmetric])
-  also have "\<dots> = num_assignments varcount bdd"
-    unfolding \<open>bdd = _\<close> ..
+  case [simp]: (3 i t e ns)
+  then have "bdd_satcount' bdd = bdd_satcount_acc' ((N i t e) # ns) {# Request i 1 0 #} 0"
+    by (subst bdd_satcount_acc'.simps) (simp del: bdd_satcount_acc'.simps add: top_def pop_def)
+  also have "\<dots> = num_pq (N i t e # ns) {#Request i 1 0#}"
+  proof -
+    have "pq_wf (N i t e # ns) {#Request i 1 0#}"
+      unfolding pq_wf_def by auto
+    then show ?thesis
+      using assms by (subst bdd_satcount_acc'_correct; simp)
+  qed
+  also have "\<dots> = num_assignments_node 0 i (N i t e # ns)"
+    by (simp add: num_pq_def num_request_def)
+  also have "\<dots> = num_assignments 0 bdd"
+    by simp
   finally show ?thesis .
-qed (use assms in \<open>simp_all add: num_assignments_Const_True num_assignments_Const_False\<close>)
+qed (use assms(1) in simp_all)
 
 end
 
