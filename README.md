@@ -21,7 +21,7 @@ parts of the formalisation of recursive BDDs in [[Michaelis2016](#references)].
 Assuming Isabelle has been added to your path, then you can run Isabelle on the
 entire project (and its dependencies) with the following command.
 ```bash
-isabelle build -D core
+isabelle build -D cadiar
 ```
 
 ## References
