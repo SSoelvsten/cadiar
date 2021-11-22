@@ -1,7 +1,6 @@
 FROM makarius/isabelle:Isabelle2021
 
-RUN
-  curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
+RUN curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
   cd Isabelle/src/ ; \
   tar -xzf ../../afp.tar.gz ; \
   echo "src/afp/thys" >> ROOTS ; \
