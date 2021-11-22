@@ -1,9 +1,9 @@
 section\<open>CountSAT procedure\<close>
 theory CountSAT
-imports Data Evaluate "HOL-Library.Multiset"
+imports Data Evaluate PriorityQueue
 begin
 
-subsection \<open>Requests and Priority Queues\<close>
+subsection \<open>Priority Queue request\<close>
 
 datatype 'l pq_item = Request (target: \<open>'l uid\<close>) (sum: \<open>nat\<close>) (levels_visited: \<open>nat\<close>)
 
@@ -33,34 +33,12 @@ lemma less_eq_pq_item_simp[simp]:
     (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 \<le> s2)\<close>
   unfolding less_eq_pq_item_def by simp
 
-
-type_synonym 'l pq = \<open>('l pq_item) multiset\<close>
-
-definition top :: \<open>('l :: linorder) pq \<Rightarrow> 'l pq_item option\<close> where
-  \<open>top pq = (if pq = {#} then None else Some (Min_mset pq))\<close>
-
-definition pop :: \<open>('l :: linorder) pq \<Rightarrow> 'l pq\<close> where
-  \<open>pop pq = (pq - {# Min_mset pq #})\<close>
-
-lemma top_in[termination_simp]:
-  "x \<in># pq" if "top pq = Some x"
-  by (metis Min_in finite_set_mset not_None_eq option.inject set_mset_eq_empty_iff that top_def)
-
-lemma top_eq_None_iff:
-  "top pq = None \<longleftrightarrow> pq = {#}"
-  unfolding top_def by simp
-
-lemma top_Min:
-  "x \<le> y" if "top pq = Some x" "y \<in># pq"
-  by (metis Min_le finite_set_mset option.discI option.sel that top_def)
-
-
 subsection \<open>Definition from Adiar\<close>
 
 context
   fixes varcount :: nat
 begin
-fun forward_paths :: \<open>'l pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat * 'l pq\<close> where
+fun forward_paths :: \<open>('l pq_item) pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat * ('l pq_item) pq\<close> where
   \<open>forward_paths pq (Leaf False) s v = (0, pq)\<close>
 | \<open>forward_paths pq (Leaf True)  s v = (s * 2^(varcount - v), pq)\<close>
 | \<open>forward_paths pq (Node u)     s v = (0, add_mset (Request u s v) pq)\<close>
@@ -69,7 +47,7 @@ lemma size_Diff1_less_iff[termination_simp]:
   "size (ms - {#x#}) < size ms \<longleftrightarrow> x \<in># ms"
   by (metis diff_single_trivial less_irrefl size_Diff1_less)
 
-fun combine_paths_acc :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * 'l pq\<close> where
+fun combine_paths_acc :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
   \<open>combine_paths_acc pq t (s_acc, v_acc) =
     (case top pq of None                  \<Rightarrow> (s_acc, v_acc, pq)
                   | Some (Request t' s v) \<Rightarrow> (if t' = t
@@ -78,10 +56,10 @@ fun combine_paths_acc :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Right
                                                     in combine_paths_acc pq' t acc')
                                               else (s_acc, v_acc, pq) ))\<close>
 
-fun combine_paths :: \<open>('l :: linorder) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * 'l pq\<close> where
+fun combine_paths :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
   \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
 
-fun bdd_satcount_acc :: \<open>('l :: linorder) node list => 'l pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
+fun bdd_satcount_acc :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
   \<open>bdd_satcount_acc [] pq result_acc =
     (case top pq of None \<Rightarrow> result_acc
                   | _    \<Rightarrow> undefined)\<close>
@@ -105,7 +83,7 @@ fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
 
 subsection \<open>Simplified definition\<close>
 
-function bdd_satcount_acc' :: \<open>('l :: linorder) node list => 'l pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
+function bdd_satcount_acc' :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
   \<open>bdd_satcount_acc' [] pq result_acc =
     (case top pq of None \<Rightarrow> result_acc
                   | _    \<Rightarrow> undefined)\<close>
