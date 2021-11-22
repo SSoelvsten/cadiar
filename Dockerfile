@@ -11,5 +11,3 @@ RUN for t in ROBDD; do \
     done
 
 RUN ./Isabelle/bin/isabelle build -o system_heaps -b ROBDD
-
-COPY ROOT *.thy ./
