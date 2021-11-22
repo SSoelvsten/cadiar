@@ -60,17 +60,17 @@ fun combine_paths :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \
   \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
 
 fun bdd_satcount_acc :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount_acc [] pq result_acc =
-    (case top pq of None \<Rightarrow> result_acc
+  \<open>bdd_satcount_acc [] pq racc =
+    (case top pq of None \<Rightarrow> racc
                   | _    \<Rightarrow> undefined)\<close>
-| \<open>bdd_satcount_acc ((N i t e) # ns) pq result_acc =
-    (case top pq of None                   \<Rightarrow> result_acc
+| \<open>bdd_satcount_acc (N i t e # ns) pq racc =
+    (case top pq of None                   \<Rightarrow> racc
                   | Some (Request tgt _ _) \<Rightarrow> (if i = tgt
                                                then let (s, lvls, pq') = combine_paths pq tgt
                                                       ; (rt, pq'') = forward_paths pq' t s (lvls+1)
                                                       ; (re, pq''') = forward_paths pq'' e s (lvls+1)
-                                                     in bdd_satcount_acc ns pq''' (result_acc + rt + re)
-                                               else bdd_satcount_acc ns pq result_acc))\<close>
+                                                     in bdd_satcount_acc ns pq''' (racc + rt + re)
+                                               else bdd_satcount_acc ns pq racc))\<close>
 
 fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
   \<open>bdd_satcount (Constant False)    = 0\<close>
@@ -84,17 +84,17 @@ fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
 subsection \<open>Simplified definition\<close>
 
 function bdd_satcount_acc' :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount_acc' [] pq result_acc =
-    (case top pq of None \<Rightarrow> result_acc
+  \<open>bdd_satcount_acc' [] pq racc =
+    (case top pq of None \<Rightarrow> racc
                   | _    \<Rightarrow> undefined)\<close>
-| \<open>bdd_satcount_acc' ((N i t e) # ns) pq result_acc =
-    (case top pq of None                   \<Rightarrow> result_acc
+| \<open>bdd_satcount_acc' ((N i t e) # ns) pq racc =
+    (case top pq of None                      \<Rightarrow> racc
                   | Some (Request tgt s lvls) \<Rightarrow> (if i = tgt
                                                then let pq' = pop pq
                                                       ; (rt, pq'') = forward_paths pq' t s (lvls+1)
                                                       ; (re, pq''') = forward_paths pq'' e s (lvls+1)
-                                                     in bdd_satcount_acc' ((N i t e) # ns) pq''' (result_acc + rt + re)
-                                               else bdd_satcount_acc' ns pq result_acc))\<close>
+                                                     in bdd_satcount_acc' ((N i t e) # ns) pq''' (racc + rt + re)
+                                               else bdd_satcount_acc' ns pq racc))\<close>
   by pat_completeness auto
 
 termination
@@ -460,11 +460,11 @@ lemma bdd_satcount_acc'_correct:
   if "pq_wf ns pq" "well_formed_nl ns" "nodes_bounded ns"
   using that
 proof (induction ns pq s rule: bdd_satcount_acc'.induct)
-  case (1 pq result_acc)
+  case (1 pq racc)
   then show ?case
     by (auto split: option.splits simp: top_eq_None_iff pq_wf_empty_nodes_iff dest: top_in)
 next
-  case (2 i t e ns pq result_acc)
+  case (2 i t e ns pq racc)
   note IH_match = 2(1) and IH_no_match = 2(2)
   show ?case
   proof (cases "top pq")
