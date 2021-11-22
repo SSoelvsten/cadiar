@@ -3,7 +3,10 @@ theory CountSAT
 imports Data Evaluate PriorityQueue
 begin
 
-subsection \<open>Priority Queue request\<close>
+subsection \<open>Priority Queue requests\<close>
+
+text \<open>The type of the priority queue elements have to be defined before the 'varcount' variable
+      fixed below.\<close>
 
 datatype 'l pq_item = Request (target: \<open>'l uid\<close>) (sum: \<open>nat\<close>) (levels_visited: \<open>nat\<close>)
 
@@ -33,83 +36,17 @@ lemma less_eq_pq_item_simp[simp]:
     (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 \<le> s2)\<close>
   unfolding less_eq_pq_item_def by simp
 
-subsection \<open>Definition from Adiar\<close>
+subsection \<open>Bounded domain boolean functions\<close>
+
+text \<open>To be able to count the number of satisfying assignments, we first need to know the number of
+      input variables. That is, we need to work with boolean functions with a bounded domain.\<close>
 
 context
   fixes varcount :: nat
 begin
-fun forward_paths :: \<open>('l pq_item) pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat * ('l pq_item) pq\<close> where
-  \<open>forward_paths pq (Leaf False) s v = (0, pq)\<close>
-| \<open>forward_paths pq (Leaf True)  s v = (s * 2^(varcount - v), pq)\<close>
-| \<open>forward_paths pq (Node u)     s v = (0, add_mset (Request u s v) pq)\<close>
-
-lemma size_Diff1_less_iff[termination_simp]:
-  "size (ms - {#x#}) < size ms \<longleftrightarrow> x \<in># ms"
-  by (metis diff_single_trivial less_irrefl size_Diff1_less)
-
-fun combine_paths_acc :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
-  \<open>combine_paths_acc pq t (s_acc, v_acc) =
-    (case top pq of None                  \<Rightarrow> (s_acc, v_acc, pq)
-                  | Some (Request t' s v) \<Rightarrow> (if t' = t
-                                              then (let acc' = (s_acc * 2^(v-v_acc) + s, v)
-                                                      ; pq'  = (pq - {# Request t' s v #})
-                                                    in combine_paths_acc pq' t acc')
-                                              else (s_acc, v_acc, pq) ))\<close>
-
-fun combine_paths :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
-  \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
-
-fun bdd_satcount_acc :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount_acc [] pq racc =
-    (case top pq of None \<Rightarrow> racc
-                  | _    \<Rightarrow> undefined)\<close>
-| \<open>bdd_satcount_acc (N i t e # ns) pq racc =
-    (case top pq of None                   \<Rightarrow> racc
-                  | Some (Request tgt _ _) \<Rightarrow> (if i = tgt
-                                               then let (s, lvls, pq') = combine_paths pq tgt
-                                                      ; (rt, pq'') = forward_paths pq' t s (lvls+1)
-                                                      ; (re, pq''') = forward_paths pq'' e s (lvls+1)
-                                                     in bdd_satcount_acc ns pq''' (racc + rt + re)
-                                               else bdd_satcount_acc ns pq racc))\<close>
-
-fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount (Constant False)    = 0\<close>
-| \<open>bdd_satcount (Constant True)     = 2^varcount\<close>
-| \<open>bdd_satcount (Nodes ((N i t e) # ns)) =
-    (let (rt, pq)  = forward_paths {#} t 1 1
-       ; (re, pq') = forward_paths pq e 1 1
-     in bdd_satcount_acc ns pq' (rt + re))\<close>
-
-
-subsection \<open>Simplified definition\<close>
-
-function bdd_satcount_acc' :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount_acc' [] pq racc =
-    (case top pq of None \<Rightarrow> racc
-                  | _    \<Rightarrow> undefined)\<close>
-| \<open>bdd_satcount_acc' ((N i t e) # ns) pq racc =
-    (case top pq of None                      \<Rightarrow> racc
-                  | Some (Request tgt s lvls) \<Rightarrow> (if i = tgt
-                                               then let pq' = pop pq
-                                                      ; (rt, pq'') = forward_paths pq' t s (lvls+1)
-                                                      ; (re, pq''') = forward_paths pq'' e s (lvls+1)
-                                                     in bdd_satcount_acc' ((N i t e) # ns) pq''' (racc + rt + re)
-                                               else bdd_satcount_acc' ns pq racc))\<close>
-  by pat_completeness auto
-
-termination
-  sorry
-
-fun bdd_satcount' :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount' (Constant False)    = 0\<close>
-| \<open>bdd_satcount' (Constant True)     = 2^varcount\<close>
-| \<open>bdd_satcount' (Nodes ((N i t e) # ns)) =
-    (let (rt, pq)  = forward_paths {#} t 1 1
-       ; (re, pq') = forward_paths pq e 1 1
-     in bdd_satcount_acc' ((N i t e) # ns) pq' (rt + re))\<close>
 
 definition
-  "dom_bounded n a \<equiv> a ` (UNIV - {n..<varcount}) \<subseteq> {False}"
+  \<open>dom_bounded n a \<equiv> a ` (UNIV - {n..<varcount}) \<subseteq> {False}\<close>
 
 definition
   "num_assignments n bdd = card {a. bdd_eval bdd a \<and> dom_bounded n a}"
@@ -120,8 +57,7 @@ definition
 definition
   "num_assignments_ptr n ptr ns = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
 
-
-subsection \<open>Properties of bounded Boolean functions\<close>
+subsubsection \<open>Basic properties of bounded Boolean functions\<close>
 
 lemma dom_bounded_alt_def:
   "dom_bounded n a \<longleftrightarrow> (\<forall>i. i \<notin> {n..<varcount} \<longrightarrow> a i = False)"
@@ -205,8 +141,7 @@ lemma card_dom_bounded':
   "card {a. dom_bounded n a} = 2 ^ (varcount - n)" if "n \<le> varcount"
   using card_dom_bounded[of "varcount - n"] that by simp
 
-
-subsection \<open>Properties of assignment counting\<close>
+subsubsection \<open>Properties of assignment counting\<close>
 
 lemma num_assignments_ptr_Node_eq[simp]:
   "num_assignments_ptr n (Node u) ns = num_assignments_node n u ns"
@@ -243,7 +178,7 @@ lemma num_assignments_restrict:
   oops
 
 
-subsection \<open>The central property of recursive counting of assignments\<close>
+subsubsection \<open>The central property of recursive counting of assignments\<close>
 
 lemma dom_bounded_upd_False:
   "dom_bounded n (a(l := False))" if "dom_bounded n a"
@@ -362,8 +297,103 @@ proof -
   finally show ?thesis .
 qed
 
+subsection \<open>Algorithm Definition\<close>
 
-subsection \<open>Assigning an assignment count to priority queues\<close>
+text \<open>The core idea of the time-forwarded CountSAT algorithm is to keep track of the number of
+      input variables that have been fixed on a path going from the root to a node. Any input
+      variable (regardless of which one) not fixed can be set to any value.
+
+      The forward_paths function takes care of the 'base cases' by either forwarding a request
+      to an internal node or to return a value to be added to the total; the value accounts the
+      number of 'unbound' variables by multiplying the number of assignments on the 'bound'
+      variables with the number of possible assignments to the rest.\<close>
+
+fun forward_paths :: \<open>('l pq_item) pq \<Rightarrow> 'l ptr \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat * ('l pq_item) pq\<close> where
+  \<open>forward_paths pq (Leaf False) s v = (0, pq)\<close>
+| \<open>forward_paths pq (Leaf True)  s v = (s * 2^(varcount - v), pq)\<close>
+| \<open>forward_paths pq (Node u)     s v = (0, add_mset (Request u s v) pq)\<close>
+
+subsubsection \<open>Simplified definition\<close>
+
+function bdd_satcount_acc' :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
+  \<open>bdd_satcount_acc' [] pq racc =
+    (case top pq of None \<Rightarrow> racc
+                  | _    \<Rightarrow> undefined)\<close>
+| \<open>bdd_satcount_acc' ((N i t e) # ns) pq racc =
+    (case top pq of None                      \<Rightarrow> racc
+                  | Some (Request tgt s lvls) \<Rightarrow> (if i = tgt
+                                               then let pq' = pop pq
+                                                      ; (rt, pq'') = forward_paths pq' t s (lvls+1)
+                                                      ; (re, pq''') = forward_paths pq'' e s (lvls+1)
+                                                     in bdd_satcount_acc' ((N i t e) # ns) pq''' (racc + rt + re)
+                                               else bdd_satcount_acc' ns pq racc))\<close>
+  by pat_completeness auto
+
+termination
+  sorry
+
+fun bdd_satcount' :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
+  \<open>bdd_satcount' (Constant False)    = 0\<close>
+| \<open>bdd_satcount' (Constant True)     = 2^varcount\<close>
+| \<open>bdd_satcount' (Nodes ((N i t e) # ns)) =
+    (let (rt, pq)  = forward_paths {#} t 1 1
+       ; (re, pq') = forward_paths pq e 1 1
+     in bdd_satcount_acc' ((N i t e) # ns) pq' (rt + re))\<close>
+
+subsubsection \<open>Definition from Adiar\<close>
+
+text \<open>We need to only forward a single request in the priority queue, if we want to keep the running
+      time to be O(N log N). To this end, we need to combine all in-going requests to the same node
+      while also accounting for any differences in the number of input variables that were bound to
+      some value.
+
+      Luckily, due to the simple solution in @{term forward_paths} this is quite simple. It is also
+      important to remember, that we had sorted the @{term pq_item} such that it was secondarily
+      sorted in ascending order by the number 'bound' variables. So, we can accumulate the sum of
+      ingoing paths and compensate for any nodes that were skipped on one path, but not the other.\<close>
+
+fun combine_paths_acc :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
+  \<open>combine_paths_acc pq t (s_acc, v_acc) =
+    (case top pq of None                  \<Rightarrow> (s_acc, v_acc, pq)
+                  | Some (Request t' s v) \<Rightarrow> (if t' = t
+                                              then (let acc' = (s_acc * 2^(v-v_acc) + s, v)
+                                                      ; pq'  = (pq - {# Request t' s v #})
+                                                    in combine_paths_acc pq' t acc')
+                                              else (s_acc, v_acc, pq) ))\<close>
+
+fun combine_paths :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
+  \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
+
+text \<open>Combining the two functions above, we get the main loop of the CountSAT function. Here all
+      in-going requests are combined to then forward them to their children and then go to the
+      next node.\<close>
+
+fun bdd_satcount_acc :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
+  \<open>bdd_satcount_acc [] pq racc =
+    (case top pq of None \<Rightarrow> racc
+                  | _    \<Rightarrow> undefined)\<close>
+| \<open>bdd_satcount_acc (N i t e # ns) pq racc =
+    (case top pq of None                   \<Rightarrow> racc
+                  | Some (Request tgt _ _) \<Rightarrow> (if i = tgt
+                                               then let (s, lvls, pq') = combine_paths pq tgt
+                                                      ; (rt, pq'') = forward_paths pq' t s (lvls+1)
+                                                      ; (re, pq''') = forward_paths pq'' e s (lvls+1)
+                                                     in bdd_satcount_acc ns pq''' (racc + rt + re)
+                                               else bdd_satcount_acc ns pq racc))\<close>
+
+fun bdd_satcount :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
+  \<open>bdd_satcount (Constant False)    = 0\<close>
+| \<open>bdd_satcount (Constant True)     = 2^varcount\<close>
+| \<open>bdd_satcount (Nodes ((N i t e) # ns)) =
+    (let (rt, pq)  = forward_paths {#} t 1 1
+       ; (re, pq') = forward_paths pq e 1 1
+     in bdd_satcount_acc ns pq' (rt + re))\<close>
+
+text \<open>TODO: make the proofs in the following work for this one instead\<close>
+
+subsection \<open>Proof of correctness\<close>
+
+subsubsection \<open>Assigning an assignment count to priority queues\<close>
 
 definition
   "num_request ns \<equiv> \<lambda>Request u s l \<Rightarrow> s * num_assignments_node l u ns"
@@ -392,8 +422,11 @@ lemma top_Min_target:
   shows "\<forall>r' \<in># pq. target r \<le> target r'"
   using top_Min[OF assms] by (metis eq_iff less_eq_pq_item_simp less_imp_le pq_item.exhaust_sel)
 
+subsubsection \<open>Correctness of @{term combine_paths}\<close>
 
-subsection \<open>Proving correctness of @{term bdd_satcount'}}\<close>
+text \<open>TODO\<close>
+
+subsubsection \<open>Correctness of @{term bdd_satcount'}}\<close>
 
 lemma forward_pathsE:
   assumes "l \<le> varcount"
@@ -574,6 +607,6 @@ proof (cases bdd rule: bdd_satcount'.cases)
   finally show ?thesis .
 qed (use assms(1) in simp_all)
 
-end
+end (* context fixes varcount :: int *)
 
 end

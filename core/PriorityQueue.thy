@@ -23,4 +23,8 @@ lemma top_Min:
   "x \<le> y" if "top pq = Some x" "y \<in># pq"
   by (metis Min_le finite_set_mset option.discI option.sel that top_def)
 
+lemma size_Diff1_less_iff[termination_simp]:
+  "size (ms - {#x#}) < size ms \<longleftrightarrow> x \<in># ms"
+  by (metis diff_single_trivial less_irrefl size_Diff1_less)
+
 end
