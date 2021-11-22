@@ -10,17 +10,16 @@ fun bdd_eval_node :: \<open>'l node list \<Rightarrow> 'l assignment \<Rightarro
 and bdd_eval_ptr :: \<open>'l node list \<Rightarrow> 'l assignment \<Rightarrow> 'l ptr \<Rightarrow> bool\<close>
   where
   \<open>bdd_eval_node []     _ _ = undefined\<close>
-| \<open>bdd_eval_node (n#ns) a t = (if uid n = t
-                               then let child = (if a (label t) then high n else low n)
-                                    in bdd_eval_ptr ns a child
-                               else bdd_eval_node ns a t)\<close>
+| \<open>bdd_eval_node (N i t e # ns) a tgt = (if i = tgt
+                                         then bdd_eval_ptr ns a (if a (label i) then t else e)
+                                         else bdd_eval_node ns a tgt)\<close>
 | \<open>bdd_eval_ptr ns a (Leaf b) = b\<close>
-| \<open>bdd_eval_ptr ns a (Node t) = bdd_eval_node ns a t\<close>
+| \<open>bdd_eval_ptr ns a (Node u) = bdd_eval_node ns a u\<close>
 
 fun bdd_eval :: \<open>'l bdd \<Rightarrow> 'l assignment \<Rightarrow> bool\<close> where
-  \<open>bdd_eval (Constant b)        _ = b\<close>
-| \<open>bdd_eval (Nodes (root#ns))   a = bdd_eval_node (root#ns) a (uid root)\<close>
-| \<open>bdd_eval (Nodes [])          _ = undefined\<close>
+  \<open>bdd_eval (Constant b)          _ = b\<close>
+| \<open>bdd_eval (Nodes (root # ns))   a = bdd_eval_node (root#ns) a (uid root)\<close>
+| \<open>bdd_eval (Nodes [])            _ = undefined\<close>
 
 subsection \<open>Linking to Binary Decision Tree\<close>
 
@@ -47,13 +46,13 @@ fun bdt_of_bdd :: \<open>'l bdd \<Rightarrow> 'l ifex\<close> where
 | \<open>bdt_of_bdd (Nodes []) = undefined\<close>
 
 lemma bdd_eval_node_iff_val_ifex_aux:
-  assumes \<open>closed ns\<close> \<open>t \<in> uid ` set ns\<close>
-  shows \<open>bdd_eval_node ns a t \<longleftrightarrow> val_ifex (bdt_of_node ns t) a\<close>
+  assumes \<open>closed ns\<close> \<open>tgt \<in> uid ` set ns\<close>
+  shows \<open>bdd_eval_node ns a tgt \<longleftrightarrow> val_ifex (bdt_of_node ns tgt) a\<close>
   using assms
-proof (induction ns arbitrary: t rule: nl_induct)
+proof (induction ns arbitrary: tgt rule: nl_induct)
   case (Cons i t e ns)
   then show ?case
-    by (cases \<open>ns = []\<close>; auto split:ptr.splits)
+    by (cases \<open>ns = []\<close>; auto split: ptr.splits)
 qed simp
 
 theorem bdd_eval_iff_val_ifex:

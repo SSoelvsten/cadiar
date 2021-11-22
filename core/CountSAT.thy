@@ -24,13 +24,13 @@ instance
 end
 
 lemma less_pq_item_simp[simp]:
-  "Request t1 s1 l1 < Request t2 s2 l2 \<longleftrightarrow>
-    (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 < s2)"
+  \<open>Request t1 s1 l1 < Request t2 s2 l2 \<longleftrightarrow>
+    (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 < s2)\<close>
   unfolding less_pq_item_def by simp
 
 lemma less_eq_pq_item_simp[simp]:
-  "Request t1 s1 l1 \<le> Request t2 s2 l2 \<longleftrightarrow>
-    (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 \<le> s2)"
+  \<open>Request t1 s1 l1 \<le> Request t2 s2 l2 \<longleftrightarrow>
+    (t1 < t2 \<or> t1 = t2 \<and> l1 < l2 \<or> t1 = t2 \<and> l1 = l2 \<and> s1 \<le> s2)\<close>
   unfolding less_eq_pq_item_def by simp
 
 
@@ -275,22 +275,6 @@ lemma dom_bounded_upd_iff:
   "dom_bounded n (a(l := b)) \<longleftrightarrow> dom_bounded n a" if "n \<le> l" "l < varcount"
   using that unfolding dom_bounded_alt_def by auto
 
-lemma well_formed_nl_ConsD[intro?]:
-  \<open>well_formed_nl ns\<close> if \<open>well_formed_nl (n # ns)\<close>
-  using that unfolding well_formed_nl_def by (cases n, simp)
-
-lemma high_lb:
-  "ptr_lb (label (uid n)) (high n)" if "inc_labels (n # ns)"
-  using that by (cases n; simp)
-
-lemma low_lb:
-  "ptr_lb (label (uid n)) (low n)" if "inc_labels (n # ns)"
-  using that by (cases n; simp)
-
-lemma ptr_lb_trans:
-  "ptr_lb l n" if "ptr_lb k n" "(l :: 'a :: order) \<le> k"
-  using that unfolding ptr_lb_def by (auto split: ptr.splits)
-
 lemma
   fixes ns :: "nat node list"
   assumes "well_formed_nl ns"
@@ -300,19 +284,19 @@ lemma
     "ptr_lb l ptr \<Longrightarrow> bdd_eval_ptr ns (a(l := b)) ptr = bdd_eval_ptr ns a ptr"
   using assms
 proof (induction ns a u and ns a ptr rule: bdd_eval_node_bdd_eval_ptr.induct)
-  case (2 n ns a t)
-  from \<open>well_formed_nl (n # ns)\<close> have \<open>well_formed_nl ns\<close>
+  case (2 i t e ns a tgt)
+  from \<open>well_formed_nl (N i t e # ns)\<close> have \<open>well_formed_nl ns\<close>
     by (rule well_formed_nl_ConsD)
   have [simp]: "(\<lambda>x. (x = l \<longrightarrow> b) \<and> (x \<noteq> l \<longrightarrow> a x)) = a(l:=b)" \<comment> \<open>XXX\<close>
     by auto
   show ?case
-  proof (cases "uid n = t")
+  proof (cases "i = tgt")
     case True
-    moreover have "ptr_lb l (high n)" "ptr_lb l (low n)"
-      using \<open>well_formed_nl (n # ns)\<close> \<open>l < label t\<close> True
+    moreover have "ptr_lb l t" "ptr_lb l e"
+      using \<open>well_formed_nl (N i t e # ns)\<close> \<open>l < label tgt\<close> True
       by (auto intro: ptr_lb_trans elim: high_lb low_lb dest!: inc_labels_if_well_formed_nl)
     ultimately show ?thesis
-      using 2(3-) \<open>well_formed_nl ns\<close> by (simp add: 2(1))
+      using 2(1-) \<open>well_formed_nl ns\<close> by (simp add: 2(1))
   next
     case False
     with 2(3-) \<open>well_formed_nl ns\<close> show ?thesis
@@ -354,22 +338,20 @@ lemma num_assignments_split:
   (is "?l = ?r")
   if "well_formed_nl (N i t e # ns)" and bounds: \<open>label i < varcount\<close> \<open>n \<le> label i\<close>
 proof -
-  have 1: "{a. (a (label i) \<longrightarrow>
-          bdd_eval_ptr ns a e \<and> dom_bounded n a) \<and>
-         (\<not> a (label i) \<longrightarrow>
-          bdd_eval_ptr ns a t \<and> dom_bounded n a)}
-  = {a. a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded n a}
-  \<union> {a. \<not> a (label i) \<and> bdd_eval_ptr ns a t \<and> dom_bounded n a}" (is "?S = ?Se \<union> ?St")
+  have 1: "{a. (a (label i) \<longrightarrow> bdd_eval_ptr ns a t \<and> dom_bounded n a) \<and>
+             (\<not> a (label i) \<longrightarrow> bdd_eval_ptr ns a e \<and> dom_bounded n a)}
+  = {a. a (label i) \<and> bdd_eval_ptr ns a t \<and> dom_bounded n a}
+  \<union> {a. \<not> a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded n a}" (is "?S = ?St \<union> ?Se")
     by auto
   from \<open>well_formed_nl _\<close> \<open>n \<le> label i\<close> have [simp]:
     "ptr_lb n t" "ptr_lb n e" "ptr_lb (label i) t" "ptr_lb (label i) e"
     by (auto intro: ptr_lb_trans elim: high_lb low_lb dest!: inc_labels_if_well_formed_nl)
   from \<open>well_formed_nl _\<close> have [simp]: "well_formed_nl ns"
     by (rule well_formed_nl_ConsD)
-  have "bdd_eval_ptr ns (a(label i := b)) e \<longleftrightarrow> bdd_eval_ptr ns a e" for a b
+  have "bdd_eval_ptr ns (a(label i := b)) t \<longleftrightarrow> bdd_eval_ptr ns a t" for a b
     by (rule bdd_eval_ptr_upd_iff; simp)
-  then have "card ?Se
-      = card {a. \<not> a (label i) \<and> bdd_eval_ptr ns a e \<and> dom_bounded n a}" (is "_ = card ?Se'")
+  then have "card ?St
+      = card {a. \<not> a (label i) \<and> bdd_eval_ptr ns a t \<and> dom_bounded n a}" (is "_ = card ?St'")
     apply (intro card_bij_eq[where f = "\<lambda>a. a(label i := False)" and g = "\<lambda>a. a(label i := True)"])
     subgoal inj_on_f
       by (smt (verit, del_insts) fun_upd_triv fun_upd_upd inj_onI mem_Collect_eq)
@@ -384,20 +366,20 @@ proof -
     subgoal finite_B \<comment> \<open>Finiteness\<close>
       by (rule inj_on_finite, rule inj_on_g, assumption, rule subs_B, assumption, rule finite_A)
     done
-  have "card ?St = card {a. bdd_eval_ptr ns a t \<and> dom_bounded (n + 1) a}"
+  have "card ?Se = card {a. bdd_eval_ptr ns a e \<and> dom_bounded (n + 1) a}"
     by (rule dom_bounded_swap_var_card_eq; simp add: bounds)
-  have "card ?Se' = card {a. bdd_eval_ptr ns a e \<and> dom_bounded (n + 1) a}"
+  have "card ?St' = card {a. bdd_eval_ptr ns a t \<and> dom_bounded (n + 1) a}"
     by (rule dom_bounded_swap_var_card_eq; simp add: bounds)
-  have disjoint: "?Se \<inter> ?St = {}"
+  have disjoint: "?St \<inter> ?Se = {}"
     by auto
-  have finite: "finite ?Se" "finite ?St" \<comment> \<open>Proofs of finiteness are annoying but routine.\<close>
+  have finite: "finite ?St" "finite ?Se" \<comment> \<open>Proofs of finiteness are annoying but routine.\<close>
     sorry
   have "?l = card ?S"
     unfolding num_assignments_node_def num_assignments_ptr_def by simp
   also have "\<dots> = ?r"
     unfolding num_assignments_node_def num_assignments_ptr_def 1
     apply (subst card_Un_disjoint, rule finite, rule finite, rule disjoint)
-    apply (simp add: \<open>card ?St = _\<close> \<open>card ?Se = _\<close> \<open>card ?Se' = _\<close>)
+    apply (simp add: \<open>card ?St = _\<close> \<open>card ?Se = _\<close> \<open>card ?St' = _\<close>)
     done
   finally show ?thesis .
 qed
@@ -468,7 +450,7 @@ lemma num_assignments_ptr_drop_parent:
   using assms unfolding num_assignments_ptr_def by (simp add: bdd_eval_ptr_drop_node)+
 
 lemma num_assignments_node_drop:
-  "num_assignments_node lvl u (n # ns) = num_assignments_node lvl u ns" if "uid n \<noteq> u"
+  \<open>num_assignments_node lvl u (N i t e # ns) = num_assignments_node lvl u ns\<close> if \<open>i \<noteq> u\<close>
   using that unfolding num_assignments_node_def by simp
 
 lemma num_pq_drop:

@@ -173,6 +173,22 @@ fun well_formed :: \<open>('l::linorder) bdd \<Rightarrow> bool\<close> where
 | \<open>well_formed (Nodes [])   = False\<close>
 | \<open>well_formed (Nodes ns)   = well_formed_nl ns\<close>
 
+lemma well_formed_nl_ConsD[intro?]:
+  \<open>well_formed_nl ns\<close> if \<open>well_formed_nl (n # ns)\<close>
+  using that unfolding well_formed_nl_def by (cases n, simp)
+
+lemma high_lb:
+  "ptr_lb (label (uid n)) (high n)" if "inc_labels (n # ns)"
+  using that by (cases n; simp)
+
+lemma low_lb:
+  "ptr_lb (label (uid n)) (low n)" if "inc_labels (n # ns)"
+  using that by (cases n; simp)
+
+lemma ptr_lb_trans:
+  "ptr_lb l n" if "ptr_lb k n" "(l :: 'a :: order) \<le> k"
+  using that unfolding ptr_lb_def by (auto split: ptr.splits)
+
 text \<open>Finally we have here a few ease-of-life lemmas for later proofs.\<close>
 
 lemma nl_induct[case_names Nil Cons]:
