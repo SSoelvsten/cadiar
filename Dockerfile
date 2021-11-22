@@ -5,6 +5,6 @@ RUN curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
   tar -xzf ../../afp.tar.gz ; \
   echo "src/afp/thys" >> ROOTS ; \
   cd .. ; \
-  rm $t.tar.gz ; \
+  rm afp.tar.gz
 
 RUN ./Isabelle/bin/isabelle build -o system_heaps -b ROBDD
