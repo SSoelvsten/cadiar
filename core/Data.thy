@@ -3,7 +3,21 @@ theory Data
 imports Main
 begin
 
+subsection \<open>Data types\<close>
+
+subsubsection \<open>Unique identifier\<close>
+
+text \<open>Every node of a BDD is uniquely identified by its label and a level-identifer. The prior is
+      the input variable in 'l that it represents, while the second is supposed to induce a total
+      ordering within a level.\<close>
+
 datatype 'l uid = U (label:\<open>'l\<close>) (id:\<open>nat\<close>)
+
+text \<open>All algorithms are based on a level-by-level processing of all nodes. This requires nodes to
+      be topologically ordered. Secondly, these algorithms need to know when they are going to see
+      a node within the level, so secondarily they are sorted on the identifier.
+
+      Hence, the uid is sorted lexicographically on the above tuple.\<close>
 
 instantiation uid :: (linorder) linorder
 begin
@@ -26,49 +40,72 @@ lemma less_eq_uid_simp[simp]:
   \<open>(U i1 id1) \<le> (U i2 id2) = (i1 < i2 \<or> (i1 = i2 \<and> id1 \<le> id2))\<close>
   unfolding less_eq_uid_def by simp
 
+subsubsection \<open>Pointer\<close>
+
+text \<open>The above encapsulates identification of an internal node of a BDD. We also need nodes to be
+      able to reference leaves in the BDD, i.e. the True and the False boolean values.
+
+      Hence, a pointer can either refer to a leaf or to an internal node. To this end, we lift the
+      ordering from both the ordering of boolean values (False < True) and the ordering of uids up
+      to pointers.\<close>
+
 datatype 'l ptr = Leaf \<open>bool\<close> | Node \<open>'l uid\<close>
 
 instantiation ptr :: (linorder) linorder
 begin
-fun less_ptr where
-  \<open>less_ptr (Node u1) (Node u2) \<longleftrightarrow> u1 < u2\<close>
-| \<open>less_ptr (Node _) (Leaf _) \<longleftrightarrow> True\<close>
-| \<open>less_ptr (Leaf _) (Node _) \<longleftrightarrow> False\<close>
-| \<open>less_ptr (Leaf b1) (Leaf b2) \<longleftrightarrow> b1 < b2\<close>
-
-lemma less_ptr_alt_def:
-  "(ptr1 :: ('b :: linorder) ptr) < (ptr2 :: ('b :: linorder) ptr) = (case (ptr1, ptr2) of
-    (Node u1, Node u2) \<Rightarrow> u1 < u2
-  | (Node _, Leaf _) \<Rightarrow> True
-  | (Leaf _, Node _) \<Rightarrow> False
-  | (Leaf b1, Leaf b2) \<Rightarrow> b1 < b2
-)"
-  by (cases "(ptr1, ptr2)" rule: less_ptr.cases) auto
+definition less_ptr where
+   \<open>less_ptr \<equiv> \<lambda>ptr1 \<Rightarrow> \<lambda>ptr2 \<Rightarrow> (case (ptr1, ptr2) of
+      (Node u1, Node u2) \<Rightarrow> u1 < u2
+    | (Node _, Leaf _) \<Rightarrow> True
+    | (Leaf _, Node _) \<Rightarrow> False
+    | (Leaf b1, Leaf b2) \<Rightarrow> b1 < b2)\<close>
 
 definition less_eq_ptr where
-  "less_eq_ptr (ptr1 :: ('b :: linorder) ptr) (ptr2 :: ('b :: linorder) ptr) = (case (ptr1, ptr2) of
-    (Node u1, Node u2) \<Rightarrow> u1 \<le> u2
-  | (Node _, Leaf _) \<Rightarrow> True
-  | (Leaf _, Node _) \<Rightarrow> False
-  | (Leaf b1, Leaf b2) \<Rightarrow> b1 \<le> b2
-)"
+   \<open>less_eq_ptr \<equiv> \<lambda>ptr1 \<Rightarrow> \<lambda>ptr2 \<Rightarrow> (case (ptr1, ptr2) of
+      (Node u1, Node u2) \<Rightarrow> u1 \<le> u2
+    | (Node _, Leaf _) \<Rightarrow> True
+    | (Leaf _, Node _) \<Rightarrow> False
+    | (Leaf b1, Leaf b2) \<Rightarrow> b1 \<le> b2
+)\<close>
 
 instance
-  by standard
-     (auto split: ptr.splits simp del: less_ptr.simps simp add: less_ptr_alt_def less_eq_ptr_def)
+  by standard (auto simp: less_ptr_def less_eq_ptr_def split: ptr.splits)
 end
 
-datatype 'l node = N (uid:\<open>'l uid\<close>) (low:\<open>'l ptr\<close>) (high:\<open>'l ptr\<close>)
+text \<open>And a simple rule to simplify case distinction on pointers within our proofs.\<close>
+
+lemma ptr_cases:
+  fixes ptr :: "'a ptr"
+  obtains
+    (True)  "ptr = Leaf True"
+  | (False) "ptr = Leaf False"
+  | (Node)  u :: "'a uid" where "ptr = Node u"
+  by (cases ptr) auto
+
+subsubsection \<open>Node data type\<close>
+
+text \<open>A node is a triple that consists of its unique identifier, i.e. its label and its
+      level-identifier, together with a pointer to its high child, i.e. where to go to in the 'then'
+      case on the input variable, and finally the pointer to its low child, i.e. where to go to when
+      the input variable evaluates to false.\<close>
+
+datatype 'l node = N (uid:\<open>'l uid\<close>) (high:\<open>'l ptr\<close>) (low:\<open>'l ptr\<close>)
+
+text \<open>Nodes are sorted lexicographically on the above triple. This makes nodes first and foremost
+      sorted by their unique identifiers, which makes them topologically ordered.
+
+      At this point, we are not (yet) going to use the ordering on children. See Reduce.thy for how
+      we actually can guarantee this ordering is fully satisfied.\<close>
 
 instantiation node :: (linorder) linorder
 begin
 definition less_node where
   \<open>less_node \<equiv> \<lambda>(N i1 t1 e1) \<Rightarrow> \<lambda>(N i2 t2 e2) \<Rightarrow>
-    (i1 < i2 \<or> i1 = i2 \<and> e1 < e2 \<or> i1 = i2 \<and> e1 = e2 \<and> t1 < t2)\<close>
+    (i1 < i2 \<or> i1 = i2 \<and> t1 < t2 \<or> i1 = i2 \<and> t1 = t2 \<and> e1 < e2)\<close>
 
 definition less_eq_node where
   \<open>less_eq_node \<equiv> \<lambda>(N i1 t1 e1) \<Rightarrow> \<lambda>(N i2 t2 e2) \<Rightarrow>
-    (i1 < i2 \<or> i1 = i2 \<and> e1 < e2 \<or> i1 = i2 \<and> e1 = e2 \<and> t1 \<le> t2)\<close>
+    (i1 < i2 \<or> i1 = i2 \<and> t1 < t2 \<or> i1 = i2 \<and> t1 = t2 \<and> e1 \<le> e2)\<close>
 
 instance
   by standard (auto simp: less_node_def less_eq_node_def split: node.splits)
@@ -77,18 +114,31 @@ end
 
 lemma less_node_simp[simp]:
   \<open>(N i1 t1 e1) < (N i2 t2 e2) =
-    (i1 < i2 \<or> i1 = i2 \<and> e1 < e2 \<or> i1 = i2 \<and> e1 = e2 \<and> t1 < t2)\<close>
+    (i1 < i2 \<or> i1 = i2 \<and> t1 < t2 \<or> i1 = i2 \<and> t1 = t2 \<and> e1 < e2)\<close>
   unfolding less_node_def by simp
 
 lemma less_eq_node_simp[simp]:
   \<open>(N i1 t1 e1) \<le> (N i2 t2 e2) \<longleftrightarrow>
-    (i1 < i2 \<or> i1 = i2 \<and> e1 < e2 \<or> i1 = i2 \<and> e1 = e2 \<and> t1 \<le> t2)\<close>
+    (i1 < i2 \<or> i1 = i2 \<and> t1 < t2 \<or> i1 = i2 \<and> t1 = t2 \<and> e1 \<le> e2)\<close>
   unfolding less_eq_node_def by simp
 
+subsection \<open>Binary Decision Diagram\<close>
+
+text \<open>A BDD is then either immediately a leaf, thereby representing a constant function. Otherwise,
+      it a (non-empty) stream of nodes, where the first node is to be interpreted as the root.\<close>
 
 datatype 'l bdd = Constant \<open>bool\<close> | Nodes \<open>'l node list\<close>
 
-type_synonym 'l assignment = \<open>'l \<Rightarrow> bool\<close>
+text \<open>All algorithms rely on the nodes in the Binary Decision Diagram are well-formed in some way.
+      Specifically, we need them to
+
+      (a) be 'closed', i.e. every node mentioned actually exists,
+      (b) be sorted
+      (c) the levels are always (strictly) increasing, i.e. a node may not mention any other node on
+          the same level or above.
+      (d) the node list is non-empty
+
+      TODO: (e) Every node mentioned is transitively reachable from the root?\<close>
 
 fun closed :: \<open>'l node list \<Rightarrow> bool\<close> where
   \<open>closed []             = True\<close>
@@ -118,6 +168,13 @@ lemma sorted_if_well_formed_nl[intro,simp]:
   "sorted ns" if "well_formed_nl ns"
   using that unfolding well_formed_nl_def by (elim conjE)
 
+fun well_formed :: \<open>('l::linorder) bdd \<Rightarrow> bool\<close> where
+  \<open>well_formed (Constant _) = True\<close>
+| \<open>well_formed (Nodes [])   = False\<close>
+| \<open>well_formed (Nodes ns)   = well_formed_nl ns\<close>
+
+text \<open>Finally we have here a few ease-of-life lemmas for later proofs.\<close>
+
 lemma nl_induct[case_names Nil Cons]:
   fixes P :: "'a node list \<Rightarrow> bool"
     and ns :: "'a node list"
@@ -125,12 +182,6 @@ lemma nl_induct[case_names Nil Cons]:
     and "\<And>i t e ns. P ns \<Longrightarrow> P (N i t e # ns)"
   shows "P ns"
   using assms by (rule closed.induct)
-
-fun well_formed :: \<open>('l::linorder) bdd \<Rightarrow> bool\<close> where
-  \<open>well_formed (Constant _) = True\<close>
-| \<open>well_formed (Nodes [])   = False\<close>
-| \<open>well_formed (Nodes ns)   = well_formed_nl ns\<close>
-
 
 fun bdd_cases where
   Const: "bdd_cases (Constant b) = undefined"
@@ -146,12 +197,14 @@ lemma bdd_cases:
     where "bdd = Nodes (N i t e # ns)"
   by (rule bdd_cases.cases)
 
-lemma ptr_cases:
-  fixes ptr :: "'a ptr"
-  obtains
-    (True)  "ptr = Leaf True"
-  | (False) "ptr = Leaf False"
-  | (Node)  u :: "'a uid" where "ptr = Node u"
-  by (cases ptr) auto
+subsection \<open>Assignment\<close>
+
+text \<open>For assignments we are going to reuse the definition from @cite{Michaelis2016} of a function
+      from the set of labels to the boolean values they were assigned.
+
+      While this is not (yet) reflective of the definition in Adiar it is planned to implement it
+      exactly like this (cf. Issue #147 on 'github.com/SSoelvsten/adiar/').\<close>
+
+type_synonym 'l assignment = \<open>'l \<Rightarrow> bool\<close>
 
 end

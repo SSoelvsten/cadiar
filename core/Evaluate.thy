@@ -2,16 +2,18 @@ section\<open>Evaluate procedure\<close>
 theory Evaluate
 imports ROBDD.BDT Data
 begin
-text \<open> Stream-like evaluation of Adiar's BDD representation \<close>
+
+text \<open>To evaluate a BDD for a function f given as assignment a, i.e. to compute f(a), one should
+      start at the root and then follow pointers until one reaches a leaf.\<close>
 
 fun bdd_eval_node :: \<open>'l node list \<Rightarrow> 'l assignment \<Rightarrow> 'l uid \<Rightarrow> bool\<close>
 and bdd_eval_ptr :: \<open>'l node list \<Rightarrow> 'l assignment \<Rightarrow> 'l ptr \<Rightarrow> bool\<close>
   where
   \<open>bdd_eval_node []     _ _ = undefined\<close>
 | \<open>bdd_eval_node (n#ns) a t = (if uid n = t
-                              then let child = (if a (label t) then high n else low n)
-                                   in bdd_eval_ptr ns a child
-                              else bdd_eval_node ns a t)\<close>
+                               then let child = (if a (label t) then high n else low n)
+                                    in bdd_eval_ptr ns a child
+                               else bdd_eval_node ns a t)\<close>
 | \<open>bdd_eval_ptr ns a (Leaf b) = b\<close>
 | \<open>bdd_eval_ptr ns a (Node t) = bdd_eval_node ns a t\<close>
 
@@ -20,7 +22,11 @@ fun bdd_eval :: \<open>'l bdd \<Rightarrow> 'l assignment \<Rightarrow> bool\<cl
 | \<open>bdd_eval (Nodes (root#ns))   a = bdd_eval_node (root#ns) a (uid root)\<close>
 | \<open>bdd_eval (Nodes [])          _ = undefined\<close>
 
-text \<open> Linking to Binary Decision Tree \<close>
+subsection \<open>Linking to Binary Decision Tree\<close>
+
+text \<open>To prove that bdd_eval above establishes a semantics for our BDD data structure, we will map
+      our BDDs to the Binary Decision Trees in @cite{Michaelis2016} and prove that bdd_eval is
+      equivalent to the recursive semantics on the tree.\<close>
 
 abbreviation Ifleaf_of_leaf :: \<open>bool \<Rightarrow> 'l ifex\<close> where
   \<open>Ifleaf_of_leaf b \<equiv> (if b then Trueif else Falseif)\<close>
@@ -39,7 +45,6 @@ fun bdt_of_bdd :: \<open>'l bdd \<Rightarrow> 'l ifex\<close> where
   \<open>bdt_of_bdd (Constant b) = Ifleaf_of_leaf b\<close>
 | \<open>bdt_of_bdd (Nodes (root#ns)) = bdt_of_node (root#ns) (uid root)\<close>
 | \<open>bdt_of_bdd (Nodes []) = undefined\<close>
-
 
 lemma bdd_eval_node_iff_val_ifex_aux:
   assumes \<open>closed ns\<close> \<open>t \<in> uid ` set ns\<close>
@@ -76,9 +81,12 @@ lemma bdt_of_node_Cons_alt:
                                else bdt_of_node ns t)\<close>
   by (simp split: ptr.split)
 
+subsubsection \<open>...\<close>
+
 fun vars_of_bdt where
   "vars_of_bdt (IF i t e) = insert i (vars_of_bdt t \<union> vars_of_bdt e)"
 | "vars_of_bdt _ = {}"
+
 
 definition dom_bounded_vars where
   "dom_bounded_vars S a \<equiv> \<forall>x. x \<notin> S \<longrightarrow> a x = False"
