@@ -1,0 +1,5 @@
+session Cadiar = ROBDD +
+  options [quick_and_dirty] (* Allow 'sorry' *)
+  theories
+    CountSAT
+    Negation
