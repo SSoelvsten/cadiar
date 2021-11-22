@@ -1,13 +1,11 @@
 FROM makarius/isabelle:Isabelle2021
 
-RUN for t in ROBDD; do \
-        curl https://www.isa-afp.org/release/afp-$t-current.tar.gz -o $t.tar.gz ; \
-        cd Isabelle/src/ ; \
-        tar -xzf ../../$t.tar.gz ; \
-        cd .. ; \
-        echo "src/$t" >> ROOTS ; \
-        cd .. ; \
-        rm $t.tar.gz ; \
-    done
+RUN
+  curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
+  cd Isabelle/src/ ; \
+  tar -xzf ../../afp.tar.gz ; \
+  echo "src/afp/thys" >> ROOTS ; \
+  cd .. ; \
+  rm $t.tar.gz ; \
 
 RUN ./Isabelle/bin/isabelle build -o system_heaps -b ROBDD
