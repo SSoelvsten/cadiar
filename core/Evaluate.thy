@@ -30,20 +30,20 @@ text \<open>To prove that bdd_eval above establishes a semantics for our BDD dat
 abbreviation Ifleaf_of_leaf :: \<open>bool \<Rightarrow> 'l ifex\<close> where
   \<open>Ifleaf_of_leaf b \<equiv> (if b then Trueif else Falseif)\<close>
 
-fun bdt_of_node :: \<open>'l node list \<Rightarrow> 'l uid \<Rightarrow> 'l ifex\<close> where
+fun bdt_of_node :: \<open>'l node list \<Rightarrow> 'l uid \<Rightarrow> 'l ifex\<close>
+and bdt_of_ptr :: \<open>'l node list \<Rightarrow> 'l ptr \<Rightarrow> 'l ifex\<close>
+where
   \<open>bdt_of_node []     _ = undefined\<close>
-| \<open>bdt_of_node (n#ns) t = (if uid n = t
-                               then let high_subtree = (case high n of Leaf b \<Rightarrow> Ifleaf_of_leaf b
-                                                                    | Node t' \<Rightarrow> bdt_of_node ns t')
-                                      ; low_subtree = (case low n of Leaf b \<Rightarrow> Ifleaf_of_leaf b
-                                                                  | Node t' \<Rightarrow> bdt_of_node ns t')
-                                     in IF (label t) high_subtree low_subtree
-                               else bdt_of_node ns t)\<close>
+| \<open>bdt_of_node (N i t e # ns) tgt = (if i = tgt
+                                     then IF (label tgt) (bdt_of_ptr ns t) (bdt_of_ptr ns e)
+                               else bdt_of_node ns tgt)\<close>
+| \<open>bdt_of_ptr ns (Leaf b) = Ifleaf_of_leaf b\<close>
+| \<open>bdt_of_ptr ns (Node u) = bdt_of_node ns u\<close>
 
 fun bdt_of_bdd :: \<open>'l bdd \<Rightarrow> 'l ifex\<close> where
-  \<open>bdt_of_bdd (Constant b) = Ifleaf_of_leaf b\<close>
-| \<open>bdt_of_bdd (Nodes (root#ns)) = bdt_of_node (root#ns) (uid root)\<close>
-| \<open>bdt_of_bdd (Nodes []) = undefined\<close>
+  \<open>bdt_of_bdd (Constant b)        = Ifleaf_of_leaf b\<close>
+| \<open>bdt_of_bdd (Nodes (root # ns)) = bdt_of_node (root # ns) (uid root)\<close>
+| \<open>bdt_of_bdd (Nodes [])          = undefined\<close>
 
 lemma bdd_eval_node_iff_val_ifex_aux:
   assumes \<open>closed ns\<close> \<open>tgt \<in> uid ` set ns\<close>
@@ -66,21 +66,7 @@ proof (cases bdd rule: bdd_cases)
              dest!: closed_if_well_formed_nl)
 qed (use assms in auto)
 
-text \<open>Evaluation of pointers, this comes in handy later.\<close>
-
-fun bdt_of_ptr :: \<open>'l node list \<Rightarrow> 'l ptr \<Rightarrow> 'l ifex\<close> where
-  \<open>bdt_of_ptr ns (Leaf b) = Ifleaf_of_leaf b\<close>
-| \<open>bdt_of_ptr ns (Node u) = bdt_of_node ns u\<close>
-
-lemma bdt_of_node_Cons_alt:
-  \<open>bdt_of_node (n#ns) t = (if uid n = t
-                               then let high_subtree = bdt_of_ptr ns (high n)
-                                      ; low_subtree = bdt_of_ptr ns (low n)
-                                     in IF (label t) high_subtree low_subtree
-                               else bdt_of_node ns t)\<close>
-  by (simp split: ptr.split)
-
-subsubsection \<open>...\<close>
+subsubsection \<open>Variable domain of Binary Decision Diagrams and Trees\<close>
 
 fun vars_of_bdt where
   "vars_of_bdt (IF i t e) = insert i (vars_of_bdt t \<union> vars_of_bdt e)"
