@@ -2,7 +2,8 @@ FROM makarius/isabelle:Isabelle2021
 
 RUN curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
   cd Isabelle/src/ ; \
-  tar -xzf ../../afp.tar.gz ; \
+  mkdir -p afp ; \
+  tar -xf ../../afp.tar.gz -C afp --strip-components=1 ; \
   cd .. ; \
   echo "src/afp/thys" >> ROOTS ; \
   cd .. ; \
