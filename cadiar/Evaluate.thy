@@ -3,7 +3,7 @@ theory Evaluate
 imports ROBDD.BDT Data
 begin
 
-text \<open>To evaluate a BDD for a function f given as assignment a, i.e. to compute f(a), one should
+text \<open>To evaluate a BDD for a function \<open>f\<close> given as assignment a, i.e. to compute \<open>f(a)\<close>, one should
       start at the root and then follow pointers until one reaches a leaf.\<close>
 
 fun bdd_eval_node :: \<open>'l node list \<Rightarrow> 'l assignment \<Rightarrow> 'l uid \<Rightarrow> bool\<close>
@@ -23,9 +23,9 @@ fun bdd_eval :: \<open>'l bdd \<Rightarrow> 'l assignment \<Rightarrow> bool\<cl
 
 subsection \<open>Linking to Binary Decision Tree\<close>
 
-text \<open>To prove that bdd_eval above establishes a semantics for our BDD data structure, we will map
-      our BDDs to the Binary Decision Trees in @cite{Michaelis2016} and prove that bdd_eval is
-      equivalent to the recursive semantics on the tree.\<close>
+text \<open>To prove that @{term bdd_eval} above establishes a semantics for our BDD data structure,
+      we will map our BDDs to the Binary Decision Trees in @{cite Michaelis2016}
+      and prove that @{term bdd_eval} is equivalent to the recursive semantics on the tree.\<close>
 
 abbreviation Ifleaf_of_leaf :: \<open>bool \<Rightarrow> 'l ifex\<close> where
   \<open>Ifleaf_of_leaf b \<equiv> (if b then Trueif else Falseif)\<close>

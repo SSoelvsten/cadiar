@@ -8,7 +8,7 @@ subsection \<open>Data types\<close>
 subsubsection \<open>Unique identifier\<close>
 
 text \<open>Every node of a BDD is uniquely identified by its label and a level-identifer. The prior is
-      the input variable in 'l that it represents, while the second is supposed to induce a total
+      the input variable in \<open>'l\<close> that it represents, while the second is supposed to induce a total
       ordering within a level.\<close>
 
 datatype 'l uid = U (label:\<open>'l\<close>) (id:\<open>nat\<close>)
@@ -43,10 +43,10 @@ lemma less_eq_uid_simp[simp]:
 subsubsection \<open>Pointer\<close>
 
 text \<open>The above encapsulates identification of an internal node of a BDD. We also need nodes to be
-      able to reference leaves in the BDD, i.e. the True and the False boolean values.
+      able to reference leaves in the BDD, i.e. the True and the False Boolean values.
 
       Hence, a pointer can either refer to a leaf or to an internal node. To this end, we lift the
-      ordering from both the ordering of boolean values (False < True) and the ordering of uids up
+      ordering from both the ordering of Boolean values (\<open>False < True\<close>) and the ordering of uids up
       to pointers.\<close>
 
 datatype 'l ptr = Leaf \<open>bool\<close> | Node \<open>'l uid\<close>
@@ -215,8 +215,8 @@ lemma bdd_cases:
 
 subsection \<open>Assignment\<close>
 
-text \<open>For assignments we are going to reuse the definition from @cite{Michaelis2016} of a function
-      from the set of labels to the boolean values they were assigned.
+text \<open>For assignments we are going to reuse the definition from @{cite Michaelis2016} of a function
+      from the set of labels to the Boolean values they were assigned.
 
       While this is not (yet) reflective of the definition in Adiar it is planned to implement it
       exactly like this (cf. Issue #147 on 'github.com/SSoelvsten/adiar/').\<close>
