@@ -5,7 +5,7 @@ FROM makarius/isabelle:Isabelle2021
 RUN curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
   mkdir -p afp ; \
   tar -xf afp.tar.gz -C afp --strip-components=1 ; \
-  echo "$(pwd)/afp/thys" >> Isabelle/src/ROOTS ; \
+  echo "$(pwd)/afp/thys" >> Isabelle/ROOTS ; \
   rm afp.tar.gz
 
 # Build session images
