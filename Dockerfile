@@ -10,5 +10,3 @@ RUN curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
   rm afp.tar.gz
 
 RUN ./Isabelle/bin/isabelle build -o system_heaps -b ROBDD
-
-COPY core/ROOT core/*.thy ./
