@@ -17,13 +17,14 @@ fun bdd_not :: \<open>'l bdd \<Rightarrow> 'l bdd\<close> where
 | \<open>bdd_not (Nodes ns)   = (Nodes (map negate ns))\<close>
 
 lemma bdd_not_correct_aux:
-  assumes \<open>well_formed_nl ns\<close> \<open>tgt \<in> uid ` set ns\<close>
+  assumes \<open>closed ns\<close> \<open>tgt \<in> uid ` set ns\<close>
   shows \<open>\<not>bdd_eval_node ns a tgt \<longleftrightarrow> bdd_eval_node (map negate ns) a tgt\<close>
-  using assms by (induction ns arbitrary: tgt rule: nl_induct) (auto split: ptr.splits)  
+  using assms by (induction ns arbitrary: tgt rule: nl_induct) (auto split: ptr.splits)
 
 theorem bdd_not_correct:
   assumes \<open>well_formed bdd\<close>
   shows \<open>\<not>bdd_eval bdd a \<longleftrightarrow> bdd_eval (bdd_not bdd) a\<close>
-  using assms bdd_not_correct_aux by (cases bdd rule: bdd_cases) (auto split:ptr.splits)
+  using assms bdd_not_correct_aux
+  by (cases bdd rule: bdd_cases; force split:ptr.splits dest!: closed_if_well_formed_nl)
 
 end
