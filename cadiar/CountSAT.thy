@@ -1,6 +1,6 @@
 section\<open>CountSAT procedure\<close>
 theory CountSAT
-imports Data Evaluate PriorityQueue
+imports Data Evaluate PriorityQueue "~/Isabelle/isabelle-finite/Finiteness"
 begin
 
 subsection \<open>Priority Queue requests\<close>
@@ -85,6 +85,33 @@ lemma dom_bounded_Suc_iff:
     by (cases "i = n") auto
   done
 
+lemma finite_dom_bounded[simp]:
+  "finite {a. dom_bounded n a}"
+proof (induction n rule: nat_descend_induct[where n = varcount])
+  case (base k)
+  then show ?case
+    by - (rule finite_subset[where B = "{\<lambda>_. False}"], auto simp: dom_bounded_alt_def)
+next
+  case (descend k)
+  have "{a. dom_bounded k a \<and> a k} \<subseteq> (\<lambda>a. a(k:=True)) ` {a. dom_bounded (Suc k) a}" (is "?S \<subseteq> ?T")
+  proof safe
+    fix a assume "dom_bounded k a" "a k"
+    let ?a = "a(k:=False)"
+    from \<open>dom_bounded k a\<close> have "dom_bounded (Suc k) ?a"
+      unfolding dom_bounded_alt_def by auto
+    moreover from \<open>a k\<close> have "?a(k:=True) = a"
+      by (intro ext; simp)
+    ultimately show "a \<in> ?T"
+      by (intro image_eqI) auto
+  qed
+  then have "{a. dom_bounded k a} \<subseteq> ?T \<union> {a. dom_bounded (Suc k) a}"
+    by (subst dom_bounded_Suc_iff) blast
+  moreover have "finite \<dots>"
+    using descend.IH by simp
+  ultimately show ?case
+    by (rule finite_subset)
+qed
+
 lemma card_dom_bounded_flip:
   "card {a. dom_bounded n a \<and> a n} = card {a. dom_bounded (Suc n) a}" if "n < varcount"
   apply (intro card_bij_eq[where f = "\<lambda>a. a(n := False)" and g = "\<lambda>a. a(n := True)"])
@@ -97,10 +124,10 @@ lemma card_dom_bounded_flip:
     by (smt (verit, del_insts) CountSAT.dom_bounded_alt_def Diff_iff atLeastLessThan_singleton fun_upd_triv fun_upd_upd insertCI ivl_diff less_Suc_eq_le mem_Collect_eq nat_less_le not_le)
   subgoal subs_B
     by (auto split: if_split_asm simp: dom_bounded_alt_def that)
-  subgoal finite_A \<comment> \<open>Finiteness\<close>
-    sorry
-  subgoal finite_B \<comment> \<open>Finiteness\<close>
-    by (rule inj_on_finite, rule inj_on_g, rule subs_B, rule finite_A)
+  subgoal finite_A
+    by simp
+  subgoal finite_B
+    by simp
   done
 
 lemma card_dom_bounded:
@@ -121,13 +148,8 @@ next
     by (subst dom_bounded_Suc_iff) auto
   from \<open>Suc n \<le> varcount\<close> have "?Sf \<inter> ?St = {}"
     unfolding dom_bounded_alt_def by auto
-  have "card ?S = card ?Sf + card ?St"
-    unfolding \<open>?S = _\<close> apply (rule card_Un_disjoint)
-    subgoal \<comment> \<open>Finiteness\<close>
-      sorry
-    subgoal \<comment> \<open>Finiteness\<close>
-      sorry
-    by (rule \<open>?Sf \<inter> ?St = {}\<close>)
+  from \<open>?Sf \<inter> ?St = {}\<close> have "card ?S = card ?Sf + card ?St"
+    unfolding \<open>?S = _\<close> by (intro card_Un_disjoint; simp)
   also have "\<dots> = card ?Sf + card ?Sf"
     using \<open>Suc n \<le> varcount\<close> by (simp add: card_dom_bounded_flip)
   also have "\<dots> = 2 ^ n + 2 ^ n"
@@ -238,11 +260,10 @@ lemma dom_bounded_swap_var_card_eq:
     by (smt (z3) fun_upd_idem_iff fun_upd_twist fun_upd_upd)
   subgoal subs_B
     using bounds by (auto simp: dom_bounded_upd_iff bdd_eval_ptr_upd_iff)
-  subgoal finite_A \<comment> \<open>Finiteness\<close>
-    sorry
-  subgoal finite_B \<comment> \<open>Finiteness\<close>
-    \<^cancel>\<open>by (rule inj_on_finite, rule inj_on_g, assumption, rule subs_B, assumption, rule finite_A)\<close>
-    sorry
+  subgoal finite_A
+    by simp
+  subgoal finite_B
+    by simp
   done
 
 lemma num_assignments_split:
@@ -274,26 +295,22 @@ proof -
       by (smt (verit, del_insts) fun_upd_triv fun_upd_upd inj_onI mem_Collect_eq)
     subgoal subs_B
       by (auto simp: bounds dom_bounded_upd_iff split: if_split_asm)
-    subgoal finite_A \<comment> \<open>Finiteness\<close>
-      sorry
-    subgoal finite_B \<comment> \<open>Finiteness\<close>
-      by (rule inj_on_finite, rule inj_on_g, assumption, rule subs_B, assumption, rule finite_A)
+    subgoal finite_A
+      by simp
+    subgoal finite_B
+      by simp
     done
   have "card ?Se = card {a. bdd_eval_ptr ns a e \<and> dom_bounded (n + 1) a}"
     by (rule dom_bounded_swap_var_card_eq; simp add: bounds)
   have "card ?St' = card {a. bdd_eval_ptr ns a t \<and> dom_bounded (n + 1) a}"
     by (rule dom_bounded_swap_var_card_eq; simp add: bounds)
-  have disjoint: "?St \<inter> ?Se = {}"
+  have "?St \<inter> ?Se = {}"
     by auto
-  have finite: "finite ?St" "finite ?Se" \<comment> \<open>Proofs of finiteness are annoying but routine.\<close>
-    sorry
   have "?l = card ?S"
     unfolding num_assignments_node_def num_assignments_ptr_def by simp
   also have "\<dots> = ?r"
     unfolding num_assignments_node_def num_assignments_ptr_def 1
-    apply (subst card_Un_disjoint, rule finite, rule finite, rule disjoint)
-    apply (simp add: \<open>card ?St = _\<close> \<open>card ?Se = _\<close> \<open>card ?St' = _\<close>)
-    done
+    by (simp add: card_Un_disjoint \<open>card ?St = _\<close> \<open>card ?Se = _\<close> \<open>card ?St' = _\<close> \<open>?St \<inter> ?Se = {}\<close>)
   finally show ?thesis .
 qed
 
