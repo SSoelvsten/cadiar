@@ -10,3 +10,6 @@ RUN curl https://www.isa-afp.org/release/afp-current.tar.gz -o afp.tar.gz ; \
 
 # Build session images
 RUN ./Isabelle/bin/isabelle build -o system_heaps -b ROBDD
+
+# Copy files -- the checkout action cannot run as the isabelle user
+COPY cadiar ./cadiar
