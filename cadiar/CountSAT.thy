@@ -1,6 +1,6 @@
 section\<open>CountSAT procedure\<close>
 theory CountSAT
-imports Data Evaluate PriorityQueue "~/Isabelle/isabelle-finite/Finiteness"
+imports Data Evaluate PriorityQueue
 begin
 
 subsection \<open>Priority Queue requests\<close>
