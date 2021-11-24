@@ -1,5 +1,7 @@
-session Cadiar = ROBDD +
+session Cadiar = HOL +
   options [quick_and_dirty] (* Allow 'sorry' *)
+  sessions
+    ROBDD
   theories
     CountSAT
     Negation
