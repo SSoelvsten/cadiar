@@ -330,35 +330,6 @@ fun forward_paths :: \<open>('l pq_item) pq \<Rightarrow> 'l ptr \<Rightarrow> n
 | \<open>forward_paths pq (Leaf True)  s v = (s * 2^(varcount - v), pq)\<close>
 | \<open>forward_paths pq (Node u)     s v = (0, add_mset (Request u s v) pq)\<close>
 
-subsubsection \<open>Simplified definition\<close>
-
-function bdd_satcount_acc' :: \<open>('l :: linorder) node list => ('l pq_item) pq \<Rightarrow> nat \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount_acc' [] pq racc =
-    (case top pq of None \<Rightarrow> racc
-                  | _    \<Rightarrow> undefined)\<close>
-| \<open>bdd_satcount_acc' ((N i t e) # ns) pq racc =
-    (case top pq of None                      \<Rightarrow> racc
-                  | Some (Request tgt s lvls) \<Rightarrow> (if i = tgt
-                                               then let pq' = pop pq
-                                                      ; (rt, pq'') = forward_paths pq' t s (lvls+1)
-                                                      ; (re, pq''') = forward_paths pq'' e s (lvls+1)
-                                                     in bdd_satcount_acc' ((N i t e) # ns) pq''' (racc + rt + re)
-                                               else bdd_satcount_acc' ns pq racc))\<close>
-  by pat_completeness auto
-
-termination
-  sorry
-
-fun bdd_satcount' :: \<open>('l :: linorder) bdd \<Rightarrow> nat\<close> where
-  \<open>bdd_satcount' (Constant False)    = 0\<close>
-| \<open>bdd_satcount' (Constant True)     = 2^varcount\<close>
-| \<open>bdd_satcount' (Nodes ((N i t e) # ns)) =
-    (let (rt, pq)  = forward_paths {#} t 1 1
-       ; (re, pq') = forward_paths pq e 1 1
-     in bdd_satcount_acc' ((N i t e) # ns) pq' (rt + re))\<close>
-
-subsubsection \<open>Definition from Adiar\<close>
-
 text \<open>We need to only forward a single request in the priority queue, if we want to keep the running
       time to be O(N log N). To this end, we need to combine all in-going requests to the same node
       while also accounting for any differences in the number of input variables that were bound to
@@ -486,7 +457,21 @@ lemma pq_wf_pop:
 
 subsubsection \<open>Correctness of @{term combine_paths}\<close>
 
-text \<open>TODO\<close>
+lemma combine_paths_eats_all:
+  assumes \<open>top pq = Some r\<close> \<open>combine_paths pq (target r) = (s', v', pq')\<close>
+  shows \<open>pq' = {# item \<in># pq . (target r) \<noteq> (target item) #}\<close>
+    sorry
+
+lemma combine_paths_preserves_pq_wf:
+  assumes \<open>pq_wf ns pq\<close> \<open>combine_paths pq u = (s', v', pq')\<close>
+  shows \<open>pq_wf ns pq'\<close>
+    sorry
+
+lemma combine_pathsE:
+  obtains s' v' pq' where
+    \<open>combine_paths pq u = (s', v', pq')\<close>
+    \<open>num_pq ns pq = num_pq ns pq' + s' * num_assignments_node v' ns u\<close>
+    sorry
 
 subsubsection \<open>Correctness of @{term forward_paths}}\<close>
 
@@ -498,22 +483,27 @@ lemma forward_pathsE:
   using assms
   by (cases ptr rule: ptr_cases; simp add: num_assignments_ptr_alt_def num_pq_def num_request_def)
 
-lemma forward_paths_pq_preserves_pq_wf:
+lemma forward_paths_preserves_pq_wf:
   assumes "forward_paths pq ptr s l = (s', pq')" "pq_wf ns pq"
     "case ptr of Node u \<Rightarrow> u \<in> uid ` set ns \<and> l \<le> label u | _ \<Rightarrow> True"
   shows "pq_wf ns pq'"
   using assms by (cases ptr rule: ptr_cases; force simp: pq_wf_def)
 
-subsubsection \<open>Correctness of @{term bdd_satcount'}}\<close>
+lemma forward_paths_target_subset:
+  assumes "forward_paths pq ptr s l = (s', pq')"
+  shows \<open>pq' \<subseteq># (case ptr of Leaf _ \<Rightarrow> pq | Node u \<Rightarrow> add_mset (Request u s l) pq)\<close>
+  using assms by (cases ptr rule: ptr_cases) auto
+
+subsubsection \<open>Correctness of @{term bdd_satcount}}\<close>
 
 definition nodes_bounded where
   "nodes_bounded ns = (label ` uid ` set ns \<subseteq> {0..<varcount})"
 
-lemma bdd_satcount_acc'_correct:
-  "bdd_satcount_acc' ns pq s = s + num_pq ns pq"
+lemma bdd_satcount_acc_correct:
+  "bdd_satcount_acc ns pq s = s + num_pq ns pq"
   if "pq_wf ns pq" "well_formed_nl ns" "nodes_bounded ns"
   using that
-proof (induction ns pq s rule: bdd_satcount_acc'.induct)
+proof (induction ns pq s rule: bdd_satcount_acc.induct)
   case (1 pq racc)
   then show ?case
     by (auto split: option.splits simp: top_eq_None_iff pq_wf_empty_nodes_iff dest: top_in)
@@ -529,54 +519,78 @@ next
     case [simp]: (Some r)
     obtain tgt s lvl where [simp]: "r = Request tgt s lvl"
       by (cases r)
+    from \<open>well_formed_nl (_ # ns)\<close> have "well_formed_nl ns" ..
+    from \<open>nodes_bounded (_ # ns)\<close> have "nodes_bounded ns"
+      unfolding nodes_bounded_def by auto
     show ?thesis
     proof (cases "tgt = i")
       case [simp]: True
+      let ?ns = "(N i t e # ns)"
       have bounds: "label i < varcount" "lvl \<le> label i"
         using \<open>nodes_bounded (_ #_)\<close> \<open>pq_wf (_ #_) pq\<close> top_in[OF Some]
         unfolding nodes_bounded_def well_formed_nl_def pq_wf_def
-        by auto
+        by auto 
       then have "Suc lvl \<le> varcount"
         by simp
-      then obtain rt pq'' where rt:
-        "forward_paths (pop pq) t s (Suc lvl) = (rt, pq'')"
-        "num_pq (N i t e # ns) pq'' + rt =
-         num_pq (N i t e # ns) (pop pq) + s * num_assignments_ptr (Suc lvl) (N i t e # ns) t"
-        by (rule forward_pathsE[of "Suc lvl" "pop pq" t s "N i t e # ns"])
-      from \<open>Suc lvl \<le> _\<close> obtain re pq''' where re:
-        "forward_paths pq'' e s (Suc lvl) = (re, pq''')"
-        "num_pq (N i t e # ns) pq''' + re =
-         num_pq (N i t e # ns) pq'' + s * num_assignments_ptr (Suc lvl) (N i t e # ns) e"
-        by (rule forward_pathsE[of "Suc lvl" pq'' e s "N i t e # ns"])
-      have "pq_wf (N i t e # ns) pq'''"
-        using re(1) rt(1) \<open>pq_wf _ pq\<close> \<open>well_formed_nl (_ # _)\<close> bounds
-        by (elim forward_paths_pq_preserves_pq_wf pq_wf_pop)
+      obtain s lvls pq' where combine:
+        "combine_paths pq i = (s, lvls, pq')"
+        "num_pq ?ns pq = num_pq ?ns pq' + s * num_assignments_node lvls ?ns i"
+        by (rule combine_pathsE[of pq i ?ns]) simp
+      let ?n = "Suc lvls"
+      have bounds2: \<open>?n \<le> varcount\<close> \<open>lvls \<le> label i\<close>
+        sorry \<comment> \<open>Finish this first and combine with bounds above\<close>
+      from \<open>?n \<le> _\<close> obtain rt pq'' where rt:
+        "forward_paths pq' t s ?n = (rt, pq'')"
+        "num_pq ?ns pq'' + rt =
+         num_pq ?ns pq' + s * num_assignments_ptr ?n ?ns t"
+         by (rule forward_pathsE[of ?n pq' t s ?ns])
+      from \<open>?n \<le> _\<close> obtain re pq''' where re:
+        "forward_paths pq'' e s ?n = (re, pq''')"
+        "num_pq ?ns pq''' + re =
+         num_pq ?ns pq'' + s * num_assignments_ptr ?n ?ns e"
+         by (rule forward_pathsE[of ?n pq'' e s ?ns])
+      from \<open>well_formed_nl ?ns\<close> have \<open>inc_labels ?ns\<close>
+        by (rule inc_labels_if_well_formed_nl)
+      have \<open>\<forall>r\<in>#pq'. target r \<noteq> i\<close>
+        using combine_paths_eats_all[OF Some] combine \<open>tgt = i\<close> by auto
+      then have \<open>\<forall>r\<in>#pq''. target r \<noteq> i\<close>
+        using forward_paths_target_subset[OF rt(1)] rt(1) set_mset_mono \<open>inc_labels _\<close> 
+        by (auto simp add: ptr_lb_def split: ptr.splits)
+      then have \<open>\<forall>r\<in>#pq'''. target r \<noteq> i\<close>
+        using forward_paths_target_subset[OF re(1)] re(1) set_mset_mono \<open>inc_labels _\<close> 
+        by (auto simp add: ptr_lb_def split: ptr.splits)
+      moreover have "pq_wf ?ns pq'''"
+        using combine(1) re(1) rt(1) \<open>pq_wf _ pq\<close> \<open>well_formed_nl (_ # _)\<close> bounds2
+        by (elim forward_paths_preserves_pq_wf combine_paths_preserves_pq_wf pq_wf_pop)
            (auto 4 4 simp: ptr_lb_def split: ptr.splits
                      dest: inc_labels_if_well_formed_nl closed_if_well_formed_nl)
-      moreover have "rt + (re + num_pq (N i t e # ns) pq''') = num_pq (N i t e # ns) pq"
+      ultimately have \<open>pq_wf ns pq'''\<close>
+        unfolding pq_wf_def by auto
+      moreover have "rt + (re + num_pq ?ns pq''') = num_pq ?ns pq"
         (is "?l = ?r")
       proof -
-        let ?n = "Suc lvl" and ?ns = "(N i t e # ns)"
-        have "?l = s * num_assignments_ptr ?n ?ns e + num_pq (N i t e # ns) (pop pq)
+        have "?l = s * num_assignments_ptr ?n ?ns e + num_pq ?ns pq'
                  + s * num_assignments_ptr ?n ?ns t"
           using rt(2) re(2) by simp
         also have "\<dots> = s * (num_assignments_ptr ?n ?ns e + num_assignments_ptr ?n ?ns t)
-                      + num_pq (N i t e # ns) (pop pq)"
+                      + num_pq ?ns pq'"
           by algebra
         also have "\<dots> = s * (num_assignments_ptr ?n ns e + num_assignments_ptr ?n ns t)
-                      + num_pq (N i t e # ns) (pop pq)"
+                      + num_pq ?ns pq'"
           using \<open>well_formed_nl ?ns\<close>
           by (simp del: inc_labels.simps add: num_assignments_ptr_drop_parent)
-        also have "\<dots> = s * (num_assignments_node lvl ?ns i) + num_pq (N i t e # ns) (pop pq)"
-          using bounds \<open>well_formed_nl (_ # ns)\<close> by (simp add: num_assignments_split)
-        also have "\<dots> = ?r"
-          by (simp add: num_request_def True num_pq_top_pop_split)
+        also have "\<dots> = s * (num_assignments_node lvls ?ns i) + num_pq ?ns pq'"
+          using bounds bounds2 \<open>well_formed_nl ?ns\<close> by (simp add: num_assignments_split)
+        also have "\<dots> = ?r" by (simp add: combine)
         finally show ?thesis .
-      qed
+        qed  
+      moreover have \<open>num_pq ?ns pq''' = num_pq ns pq'''\<close>
+        using \<open>\<forall>r\<in>#pq'''. target r \<noteq> i\<close> by (rule num_pq_drop)  
       ultimately show ?thesis
-        using \<open>well_formed_nl (_ # ns)\<close> \<open>nodes_bounded (_ # ns)\<close>
-        by (subst bdd_satcount_acc'.simps)
-           (auto simp del: bdd_satcount_acc'.simps simp add: rt(1) re(1) IH_match)
+        using \<open>well_formed_nl ns\<close> \<open>nodes_bounded ns\<close>
+        by (subst bdd_satcount_acc.simps)
+           (auto simp del: bdd_satcount_acc.simps combine_paths.simps
+                 simp add: combine(1) rt(1) re(1) IH_match)
     next
       case False
       have i_not_in_pq: "\<forall>r \<in># pq. target r \<noteq> i"
@@ -598,28 +612,25 @@ next
         using \<open>pq_wf _ pq\<close> i_not_in_pq
         unfolding pq_wf_def
         by auto
-      moreover from \<open>well_formed_nl (_ # ns)\<close> have "well_formed_nl ns" ..
-      moreover from \<open>nodes_bounded (_ # ns)\<close> have "nodes_bounded ns"
-        unfolding nodes_bounded_def by auto
       ultimately show ?thesis
-        using False by (simp add: IH_no_match)
+        using False \<open>well_formed_nl ns\<close> \<open>nodes_bounded ns\<close> by (simp add: IH_no_match)
     qed
   qed
 qed
 
-theorem bdd_satcount'_correct:
+theorem bdd_satcount_correct:
   assumes "well_formed bdd" "case bdd of Nodes ns \<Rightarrow> nodes_bounded ns | _ \<Rightarrow> True"
-  shows "bdd_satcount' bdd = num_assignments 0 bdd"
-proof (cases bdd rule: bdd_satcount'.cases)
+  shows "bdd_satcount bdd = num_assignments 0 bdd"
+proof (cases bdd rule: bdd_satcount.cases)
   case [simp]: (3 i t e ns)
-  then have "bdd_satcount' bdd = bdd_satcount_acc' ((N i t e) # ns) {# Request i 1 0 #} 0"
-    by (subst bdd_satcount_acc'.simps) (simp del: bdd_satcount_acc'.simps add: top_def pop_def)
+  then have "bdd_satcount bdd = bdd_satcount_acc ((N i t e) # ns) {# Request i 1 0 #} 0"
+    by (subst bdd_satcount_acc.simps) (simp del: bdd_satcount_acc.simps add: top_def pop_def)
   also have "\<dots> = num_pq (N i t e # ns) {#Request i 1 0#}"
   proof -
     have "pq_wf (N i t e # ns) {#Request i 1 0#}"
       unfolding pq_wf_def by auto
     then show ?thesis
-      using assms by (subst bdd_satcount_acc'_correct; simp)
+      using assms by (subst bdd_satcount_acc_correct; simp)
   qed
   also have "\<dots> = num_assignments_node 0 (N i t e # ns) i"
     by (simp add: num_pq_def num_request_def)
