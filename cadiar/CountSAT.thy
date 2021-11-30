@@ -48,15 +48,6 @@ begin
 definition
   \<open>dom_bounded n a \<equiv> a ` (UNIV - {n..<varcount}) \<subseteq> {False}\<close>
 
-definition
-  "num_assignments n bdd = card {a. bdd_eval bdd a \<and> dom_bounded n a}"
-
-definition
-  "num_assignments_node n u ns = card {a. bdd_eval_node ns a u \<and> dom_bounded n a}"
-
-definition
-  "num_assignments_ptr n ptr ns = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
-
 subsubsection \<open>Basic properties of bounded Boolean functions\<close>
 
 lemma dom_bounded_alt_def:
@@ -165,16 +156,25 @@ lemma card_dom_bounded':
 
 subsubsection \<open>Properties of assignment counting\<close>
 
+definition
+  "num_assignments n bdd = card {a. bdd_eval bdd a \<and> dom_bounded n a}"
+
+definition
+  "num_assignments_node n ns u = card {a. bdd_eval_node ns a u \<and> dom_bounded n a}"
+
+definition
+  "num_assignments_ptr n ns ptr = card {a. bdd_eval_ptr ns a ptr \<and> dom_bounded n a}"
+
 lemma num_assignments_ptr_Node_eq[simp]:
-  "num_assignments_ptr n (Node u) ns = num_assignments_node n u ns"
+  "num_assignments_ptr n ns (Node u)  = num_assignments_node n ns u"
   unfolding num_assignments_ptr_def num_assignments_node_def by simp
 
 lemma num_assignments_ptr_alt_def:
-  "num_assignments_ptr n ptr ns = (
+  "num_assignments_ptr n ns ptr = (
       case ptr of
         Leaf False \<Rightarrow> 0
       | Leaf True  \<Rightarrow> 2 ^ (varcount - n)
-      | Node u \<Rightarrow> num_assignments_node n u ns
+      | Node u \<Rightarrow> num_assignments_node n ns u
   )" if "n \<le> varcount"
   using that unfolding num_assignments_ptr_def num_assignments_node_def
   by (simp split: ptr.splits bool.splits add: card_dom_bounded')
@@ -188,11 +188,11 @@ lemma num_assignments_Const_False[simp]:
   unfolding num_assignments_def by simp
 
 lemma num_assignments_ptr_leaf_eq_num_assignments[simp]:
-  "num_assignments_ptr n (Leaf b) ns = num_assignments n (Constant b)"
+  "num_assignments_ptr n ns (Leaf b) = num_assignments n (Constant b)"
   unfolding num_assignments_def num_assignments_ptr_def by simp
 
 lemma num_assignments_nodes_eq[simp]:
-  "num_assignments n (Nodes (N i t e # ns)) = num_assignments_node n i (N i t e # ns)"
+  "num_assignments n (Nodes (N i t e # ns)) = num_assignments_node n (N i t e # ns) i"
   unfolding num_assignments_def num_assignments_node_def by simp
 
 lemma num_assignments_restrict:
@@ -267,8 +267,8 @@ lemma dom_bounded_swap_var_card_eq:
   done
 
 lemma num_assignments_split:
-  "num_assignments_node n i (N i t e # ns) =
-   num_assignments_ptr (n + 1) t ns + num_assignments_ptr (n + 1) e ns"
+  "num_assignments_node n (N i t e # ns) i =
+   num_assignments_ptr (n + 1) ns t + num_assignments_ptr (n + 1) ns e"
   (is "?l = ?r")
   if "well_formed_nl (N i t e # ns)" and bounds: \<open>label i < varcount\<close> \<open>n \<le> label i\<close>
 proof -
@@ -410,10 +410,26 @@ text \<open>TODO: make the proofs in the following work for this one instead\<cl
 
 subsection \<open>Proof of correctness\<close>
 
+lemma bdd_eval_ptr_drop_node:
+  fixes n :: "('a :: linorder) node"
+  assumes "ptr_lb (label (uid n)) ptr"
+  shows "bdd_eval_ptr (n # ns) a ptr = bdd_eval_ptr ns a ptr"
+  using assms by (cases n; cases ptr; auto simp: ptr_lb_def)
+
+lemma num_assignments_ptr_drop_parent:
+  assumes "inc_labels (N i t e # ns)"
+  shows "num_assignments_ptr lvl (N i t e # ns) e = num_assignments_ptr lvl ns e"
+    and "num_assignments_ptr lvl (N i t e # ns) t = num_assignments_ptr lvl ns t"
+  using assms unfolding num_assignments_ptr_def by (simp add: bdd_eval_ptr_drop_node)+
+
+lemma num_assignments_node_drop:
+  \<open>num_assignments_node lvl (N i t e # ns) u = num_assignments_node lvl ns u\<close> if \<open>i \<noteq> u\<close>
+  using that unfolding num_assignments_node_def by simp
+
 subsubsection \<open>Assigning an assignment count to priority queues\<close>
 
 definition
-  "num_request ns \<equiv> \<lambda>Request u s l \<Rightarrow> s * num_assignments_node l u ns"
+  "num_request ns \<equiv> \<lambda>Request u s l \<Rightarrow> s * num_assignments_node l ns u"
 
 definition
   "num_pq ns pq \<equiv> \<Sum>r \<in># pq. num_request ns r"
@@ -423,7 +439,7 @@ lemma num_pq_Mempty_eq_0[simp]:
   unfolding num_pq_def by simp
 
 lemma num_request_alt_def:
-  "num_request ns (Request u s l) = s * num_assignments_node l u ns"
+  "num_request ns (Request u s l) = s * num_assignments_node l ns u"
   unfolding num_request_def by simp
 
 lemma top_pop_split:
@@ -439,19 +455,18 @@ lemma top_Min_target:
   shows "\<forall>r' \<in># pq. target r \<le> target r'"
   using top_Min[OF assms] by (metis eq_iff less_eq_pq_item_simp less_imp_le pq_item.exhaust_sel)
 
-subsubsection \<open>Correctness of @{term combine_paths}\<close>
-
-text \<open>TODO\<close>
-
-subsubsection \<open>Correctness of @{term bdd_satcount'}}\<close>
-
-lemma forward_pathsE:
-  assumes "l \<le> varcount"
-  obtains s' pq' where
-    "forward_paths pq ptr s l = (s', pq')"
-    "num_pq ns pq' + s' = num_pq ns pq + s * num_assignments_ptr l ptr ns"
-  using assms
-  by (cases ptr rule: ptr_cases; simp add: num_assignments_ptr_alt_def num_pq_def num_request_def)
+lemma num_pq_drop:
+  assumes "\<forall>r \<in># pq. target r \<noteq> i"
+  shows "num_pq (N i t e # ns) pq = num_pq ns pq"
+proof -
+  have "num_request (N i t e # ns) r = num_request ns r" if "r \<in># pq" for r
+    unfolding num_request_def using that assms
+    by (auto simp: num_assignments_node_drop split: pq_item.splits)
+  then show ?thesis
+    unfolding num_pq_def by (simp cong: image_mset_cong)
+qed
+  
+subsubsection \<open>Well-formedness of Priority Queue\<close>
 
 definition
   "pq_wf ns pq \<equiv> target ` set_mset pq \<subseteq> uid ` set ns
@@ -465,35 +480,23 @@ lemma pq_wf_empty:
   "pq_wf ns {#}"
   unfolding pq_wf_def by simp
 
-lemma bdd_eval_ptr_drop_node:
-  fixes n :: "('a :: linorder) node"
-  assumes "ptr_lb (label (uid n)) ptr"
-  shows "bdd_eval_ptr (n # ns) a ptr = bdd_eval_ptr ns a ptr"
-  using assms by (cases n; cases ptr; auto simp: ptr_lb_def)
+lemma pq_wf_pop:
+  "pq_wf ns (pop pq)" if "pq_wf ns pq"
+  using that unfolding pq_wf_def pop_def by (meson image_subset_iff in_diffD)
 
-lemma num_assignments_ptr_drop_parent:
-  assumes "inc_labels (N i t e # ns)"
-  shows "num_assignments_ptr lvl e (N i t e # ns) = num_assignments_ptr lvl e ns"
-    and "num_assignments_ptr lvl t (N i t e # ns) = num_assignments_ptr lvl t ns"
-  using assms unfolding num_assignments_ptr_def by (simp add: bdd_eval_ptr_drop_node)+
+subsubsection \<open>Correctness of @{term combine_paths}\<close>
 
-lemma num_assignments_node_drop:
-  \<open>num_assignments_node lvl u (N i t e # ns) = num_assignments_node lvl u ns\<close> if \<open>i \<noteq> u\<close>
-  using that unfolding num_assignments_node_def by simp
+text \<open>TODO\<close>
 
-lemma num_pq_drop:
-  assumes "\<forall>r \<in># pq. target r \<noteq> i"
-  shows "num_pq (N i t e # ns) pq = num_pq ns pq"
-proof -
-  have "num_request (N i t e # ns) r = num_request ns r" if "r \<in># pq" for r
-    unfolding num_request_def using that assms
-    by (auto simp: num_assignments_node_drop split: pq_item.splits)
-  then show ?thesis
-    unfolding num_pq_def by (simp cong: image_mset_cong)
-qed
+subsubsection \<open>Correctness of @{term forward_paths}}\<close>
 
-definition nodes_bounded where
-  "nodes_bounded ns = (label ` uid ` set ns \<subseteq> {0..<varcount})"
+lemma forward_pathsE:
+  assumes "l \<le> varcount"
+  obtains s' pq' where
+    "forward_paths pq ptr s l = (s', pq')"
+    "num_pq ns pq' + s' = num_pq ns pq + s * num_assignments_ptr l ns ptr"
+  using assms
+  by (cases ptr rule: ptr_cases; simp add: num_assignments_ptr_alt_def num_pq_def num_request_def)
 
 lemma forward_paths_pq_preserves_pq_wf:
   assumes "forward_paths pq ptr s l = (s', pq')" "pq_wf ns pq"
@@ -501,9 +504,10 @@ lemma forward_paths_pq_preserves_pq_wf:
   shows "pq_wf ns pq'"
   using assms by (cases ptr rule: ptr_cases; force simp: pq_wf_def)
 
-lemma pq_wf_pop:
-  "pq_wf ns (pop pq)" if "pq_wf ns pq"
-  using that unfolding pq_wf_def pop_def by (meson image_subset_iff in_diffD)
+subsubsection \<open>Correctness of @{term bdd_satcount'}}\<close>
+
+definition nodes_bounded where
+  "nodes_bounded ns = (label ` uid ` set ns \<subseteq> {0..<varcount})"
 
 lemma bdd_satcount_acc'_correct:
   "bdd_satcount_acc' ns pq s = s + num_pq ns pq"
@@ -537,12 +541,12 @@ next
       then obtain rt pq'' where rt:
         "forward_paths (pop pq) t s (Suc lvl) = (rt, pq'')"
         "num_pq (N i t e # ns) pq'' + rt =
-         num_pq (N i t e # ns) (pop pq) + s * num_assignments_ptr (Suc lvl) t (N i t e # ns)"
+         num_pq (N i t e # ns) (pop pq) + s * num_assignments_ptr (Suc lvl) (N i t e # ns) t"
         by (rule forward_pathsE[of "Suc lvl" "pop pq" t s "N i t e # ns"])
       from \<open>Suc lvl \<le> _\<close> obtain re pq''' where re:
         "forward_paths pq'' e s (Suc lvl) = (re, pq''')"
         "num_pq (N i t e # ns) pq''' + re =
-         num_pq (N i t e # ns) pq'' + s * num_assignments_ptr (Suc lvl) e (N i t e # ns)"
+         num_pq (N i t e # ns) pq'' + s * num_assignments_ptr (Suc lvl) (N i t e # ns) e"
         by (rule forward_pathsE[of "Suc lvl" pq'' e s "N i t e # ns"])
       have "pq_wf (N i t e # ns) pq'''"
         using re(1) rt(1) \<open>pq_wf _ pq\<close> \<open>well_formed_nl (_ # _)\<close> bounds
@@ -553,17 +557,17 @@ next
         (is "?l = ?r")
       proof -
         let ?n = "Suc lvl" and ?ns = "(N i t e # ns)"
-        have "?l = s * num_assignments_ptr ?n e ?ns + num_pq (N i t e # ns) (pop pq)
-                 + s * num_assignments_ptr ?n t ?ns"
+        have "?l = s * num_assignments_ptr ?n ?ns e + num_pq (N i t e # ns) (pop pq)
+                 + s * num_assignments_ptr ?n ?ns t"
           using rt(2) re(2) by simp
-        also have "\<dots> = s * (num_assignments_ptr ?n e ?ns + num_assignments_ptr ?n t ?ns)
+        also have "\<dots> = s * (num_assignments_ptr ?n ?ns e + num_assignments_ptr ?n ?ns t)
                       + num_pq (N i t e # ns) (pop pq)"
           by algebra
-        also have "\<dots> = s * (num_assignments_ptr ?n e ns + num_assignments_ptr ?n t ns)
+        also have "\<dots> = s * (num_assignments_ptr ?n ns e + num_assignments_ptr ?n ns t)
                       + num_pq (N i t e # ns) (pop pq)"
           using \<open>well_formed_nl ?ns\<close>
           by (simp del: inc_labels.simps add: num_assignments_ptr_drop_parent)
-        also have "\<dots> = s * (num_assignments_node lvl i ?ns) + num_pq (N i t e # ns) (pop pq)"
+        also have "\<dots> = s * (num_assignments_node lvl ?ns i) + num_pq (N i t e # ns) (pop pq)"
           using bounds \<open>well_formed_nl (_ # ns)\<close> by (simp add: num_assignments_split)
         also have "\<dots> = ?r"
           by (simp add: num_request_def True num_pq_top_pop_split)
@@ -617,7 +621,7 @@ proof (cases bdd rule: bdd_satcount'.cases)
     then show ?thesis
       using assms by (subst bdd_satcount_acc'_correct; simp)
   qed
-  also have "\<dots> = num_assignments_node 0 i (N i t e # ns)"
+  also have "\<dots> = num_assignments_node 0 (N i t e # ns) i"
     by (simp add: num_pq_def num_request_def)
   also have "\<dots> = num_assignments 0 bdd"
     by simp
