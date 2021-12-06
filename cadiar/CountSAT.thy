@@ -473,10 +473,49 @@ lemma combine_paths_only_consumes:
 using assms by (auto simp del: combine_paths_aux.simps
                      simp add: combine_paths_aux_only_consumes)
 
-lemma combine_paths_consumes_all:
+abbreviation pq_lb where
+  \<open>pq_lb pq t \<equiv> (case top pq of Some (Request tgt _ _) \<Rightarrow> t \<le> tgt | None \<Rightarrow> True)\<close>
+
+lemma combine_paths_aux_consumes_all_top:
+  assumes \<open>combine_paths_aux pq t acc = (s', v', pq')\<close>
+          \<open>(case top pq of Some (Request tgt _ _) \<Rightarrow> t \<le> tgt | None \<Rightarrow> True)\<close>
+  shows \<open>pq' = {# item \<in># pq . t \<noteq> (target item) #}\<close>
+using assms proof (induction pq t acc rule: combine_paths_aux.induct)
+  case (1 pq t s_acc v_acc)
+  note IH = 1(1)
+  note Prems = 1(2-)
+  show ?case
+  proof (cases \<open>top pq\<close>)
+    case None
+    with Prems show ?thesis
+    by (simp add: top_eq_None_iff)
+  next
+    case (Some r)
+    note [simp del] = combine_paths_aux.simps
+    obtain t' s v where [simp]: "r = Request t' s v" by (cases r)
+    show ?thesis
+    proof (cases \<open>t' = t\<close>)
+      case True
+      have *: \<open>{#item \<in># pq. t \<noteq> target item#} = {#item \<in># pq - {# Request t s v #}. t \<noteq> target item#}\<close>
+      by simp
+      then show ?thesis
+        using Prems Some True in_diffD
+        by - (subst (asm) (1) combine_paths_aux.simps, subst *,
+              fastforce intro!: IH dest: top_Min_target top_in split: option.splits pq_item.splits)
+    next
+      case False
+      then show ?thesis
+        using Prems Some \<open>r = _\<close>
+        by - (rule sym, auto simp add: combine_paths_aux.simps filter_mset_eq_conv dest!: top_Min_target)
+    qed
+  qed
+qed
+
+lemma combine_paths_consumes_all_top:
   assumes \<open>top pq = Some r\<close> \<open>combine_paths pq (target r) = (s', v', pq')\<close>
   shows \<open>pq' = {# item \<in># pq . (target r) \<noteq> (target item) #}\<close>
-  sorry
+  using assms by (auto simp del: combine_paths_aux.simps
+                       simp add: combine_paths_aux_consumes_all_top)
 
 lemma combine_paths_preserves_pq_wf:
   assumes \<open>pq_wf ns pq\<close> \<open>combine_paths pq u = (s', v', pq')\<close>
@@ -489,11 +528,17 @@ proof -
     by (meson dual_order.trans image_mono mset_subset_eqD set_mset_mono)
 qed
 
+lemma combine_paths_auxE:
+  obtains s' v' pq' where
+    \<open>combine_paths_aux pq u acc = (s', v', pq')\<close>
+    \<open>num_pq ns pq = num_pq ns pq' + s' * num_assignments_node v' ns u\<close>
+  sorry
+
 lemma combine_pathsE:
   obtains s' v' pq' where
     \<open>combine_paths pq u = (s', v', pq')\<close>
     \<open>num_pq ns pq = num_pq ns pq' + s' * num_assignments_node v' ns u\<close>
-    sorry
+  using combine_paths_auxE by (auto simp del: combine_paths_aux.simps) blast
 
 subsubsection \<open>Correctness of @{term forward_paths}}\<close>
 
@@ -574,7 +619,7 @@ next
       from \<open>well_formed_nl ?ns\<close> have \<open>inc_labels ?ns\<close>
         by (rule inc_labels_if_well_formed_nl)
       have \<open>\<forall>r\<in>#pq'. target r \<noteq> i\<close>
-        using combine_paths_consumes_all[OF Some] combine \<open>tgt = i\<close> by auto
+        using combine_paths_consumes_all_top[OF Some] combine \<open>tgt = i\<close> by auto
       then have \<open>\<forall>r\<in>#pq''. target r \<noteq> i\<close>
         using forward_paths_target_subset[OF rt(1)] rt(1) set_mset_mono \<open>inc_labels _\<close> 
         by (auto simp add: ptr_lb_def split: ptr.splits)
