@@ -340,17 +340,17 @@ text \<open>We need to only forward a single request in the priority queue, if w
       sorted in ascending order by the number 'bound' variables. So, we can accumulate the sum of
       ingoing paths and compensate for any nodes that were skipped on one path, but not the other.\<close>
 
-fun combine_paths_acc :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
-  \<open>combine_paths_acc pq t (s_acc, v_acc) =
+fun combine_paths_aux :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
+  \<open>combine_paths_aux pq t (s_acc, v_acc) =
     (case top pq of None                  \<Rightarrow> (s_acc, v_acc, pq)
                   | Some (Request t' s v) \<Rightarrow> (if t' = t
                                               then (let acc' = (s_acc * 2^(v-v_acc) + s, v)
                                                       ; pq'  = (pq - {# Request t' s v #})
-                                                    in combine_paths_acc pq' t acc')
+                                                    in combine_paths_aux pq' t acc')
                                               else (s_acc, v_acc, pq) ))\<close>
 
 fun combine_paths :: \<open>(('l :: linorder) pq_item) pq \<Rightarrow> 'l uid \<Rightarrow> nat * nat * ('l pq_item) pq\<close> where
-  \<open>combine_paths pq t = combine_paths_acc pq t (0,0)\<close>
+  \<open>combine_paths pq t = combine_paths_aux pq t (0,0)\<close>
 
 text \<open>Combining the two functions above, we get the main loop of the CountSAT function. Here all
       in-going requests are combined to then forward them to their children and then go to the
@@ -457,15 +457,31 @@ lemma pq_wf_pop:
 
 subsubsection \<open>Correctness of @{term combine_paths}\<close>
 
-lemma combine_paths_eats_all:
+lemma combine_paths_aux_only_consumes:
+  assumes \<open>combine_paths_aux pq u acc = (s', v', pq')\<close>
+  shows \<open>pq' \<subseteq># pq\<close>
+using assms proof (induction rule: combine_paths_aux.induct)
+  case (1 pq t s_acc v_acc)
+  then show ?case
+    by (cases \<open>top pq\<close>; simp split: pq_item.splits if_splits)
+       (meson diff_subset_eq_self subset_mset.dual_order.trans)
+qed
+
+lemma combine_paths_only_consumes:
+  assumes \<open>combine_paths pq u = (s', v', pq')\<close>
+  shows \<open>pq' \<subseteq># pq\<close>
+using assms by (auto simp del: combine_paths_aux.simps
+                     simp add: combine_paths_aux_only_consumes)
+
+lemma combine_paths_consumes_all:
   assumes \<open>top pq = Some r\<close> \<open>combine_paths pq (target r) = (s', v', pq')\<close>
   shows \<open>pq' = {# item \<in># pq . (target r) \<noteq> (target item) #}\<close>
-    sorry
+  sorry
 
 lemma combine_paths_preserves_pq_wf:
   assumes \<open>pq_wf ns pq\<close> \<open>combine_paths pq u = (s', v', pq')\<close>
   shows \<open>pq_wf ns pq'\<close>
-    sorry
+  sorry
 
 lemma combine_pathsE:
   obtains s' v' pq' where
@@ -552,7 +568,7 @@ next
       from \<open>well_formed_nl ?ns\<close> have \<open>inc_labels ?ns\<close>
         by (rule inc_labels_if_well_formed_nl)
       have \<open>\<forall>r\<in>#pq'. target r \<noteq> i\<close>
-        using combine_paths_eats_all[OF Some] combine \<open>tgt = i\<close> by auto
+        using combine_paths_consumes_all[OF Some] combine \<open>tgt = i\<close> by auto
       then have \<open>\<forall>r\<in>#pq''. target r \<noteq> i\<close>
         using forward_paths_target_subset[OF rt(1)] rt(1) set_mset_mono \<open>inc_labels _\<close> 
         by (auto simp add: ptr_lb_def split: ptr.splits)
