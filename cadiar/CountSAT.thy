@@ -481,7 +481,13 @@ lemma combine_paths_consumes_all:
 lemma combine_paths_preserves_pq_wf:
   assumes \<open>pq_wf ns pq\<close> \<open>combine_paths pq u = (s', v', pq')\<close>
   shows \<open>pq_wf ns pq'\<close>
-  sorry
+proof -
+  from assms have \<open>pq' \<subseteq># pq\<close>
+    by (simp add: combine_paths_only_consumes)
+  thus ?thesis
+    using assms unfolding pq_wf_def
+    by (meson dual_order.trans image_mono mset_subset_eqD set_mset_mono)
+qed
 
 lemma combine_pathsE:
   obtains s' v' pq' where
