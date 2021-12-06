@@ -1,5 +1,7 @@
 # Cadiar : Certified Adiar
 
+[![Build](https://github.com/SSoelvsten/cadiar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SSoelvsten/cadiar/actions/workflows/ci.yml)
+
 This repository provides a formal verification of the core procedures in the
 I/O-efficient BDD package [Adiar](https://github.com/SSoelvsten/adiar) as
 described in [[Sølvsten2021](#references)]. The properties of the data structure
