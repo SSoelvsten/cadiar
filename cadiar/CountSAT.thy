@@ -195,10 +195,6 @@ lemma num_assignments_nodes_eq[simp]:
   "num_assignments n (Nodes (N i t e # ns)) = num_assignments_node n (N i t e # ns) i"
   unfolding num_assignments_def num_assignments_node_def by simp
 
-lemma num_assignments_restrict:
-  "num_assignments n bdd = num_assignments_vars bdd * 2 ^ (n - card (vars_of_bdd bdd))"
-  oops
-
 
 subsubsection \<open>The central property of recursive counting of assignments\<close>
 
@@ -314,6 +310,17 @@ proof -
   finally show ?thesis .
 qed
 
+lemma num_assignments_restrict:
+  assumes \<open>l1 + x < label t\<close> \<open>label t < varcount\<close>
+  shows \<open>num_assignments_node l1 ns t = (2^x) * num_assignments_node (l1+x) ns t\<close>
+  sorry
+
+lemma num_assignments_merge:
+  assumes \<open>l2 \<le> l1\<close> \<open>l1 < label t\<close> \<open>label t < varcount\<close>
+  shows \<open>s1 * num_assignments_node l1 ns t + s2 * num_assignments_node l2 ns t
+         = (s2 * 2 ^ (l1 - l2) + s1) * num_assignments_node l1 ns t\<close>
+  sorry
+
 subsection \<open>Algorithm Definition\<close>
 
 text \<open>The core idea of the time-forwarded CountSAT algorithm is to keep track of the number of
@@ -393,7 +400,7 @@ lemma num_assignments_ptr_drop_parent:
     and "num_assignments_ptr lvl (N i t e # ns) t = num_assignments_ptr lvl ns t"
   using assms unfolding num_assignments_ptr_def by (simp add: bdd_eval_ptr_drop_node)+
 
-lemma num_assignments_node_drop:
+lemma num_assignments_drop_node:
   \<open>num_assignments_node lvl (N i t e # ns) u = num_assignments_node lvl ns u\<close> if \<open>i \<noteq> u\<close>
   using that unfolding num_assignments_node_def by simp
 
@@ -432,7 +439,7 @@ lemma num_pq_drop:
 proof -
   have "num_request (N i t e # ns) r = num_request ns r" if "r \<in># pq" for r
     unfolding num_request_def using that assms
-    by (auto simp: num_assignments_node_drop split: pq_item.splits)
+    by (auto simp: num_assignments_drop_node split: pq_item.splits)
   then show ?thesis
     unfolding num_pq_def by (simp cong: image_mset_cong)
 qed
@@ -478,7 +485,7 @@ abbreviation pq_lb where
 
 lemma combine_paths_aux_consumes_all_top:
   assumes \<open>combine_paths_aux pq t acc = (s', v', pq')\<close>
-          \<open>(case top pq of Some (Request tgt _ _) \<Rightarrow> t \<le> tgt | None \<Rightarrow> True)\<close>
+          \<open>pq_lb pq t\<close>
   shows \<open>pq' = {# item \<in># pq . t \<noteq> (target item) #}\<close>
 using assms proof (induction pq t acc rule: combine_paths_aux.induct)
   case (1 pq t s_acc v_acc)
@@ -506,13 +513,14 @@ using assms proof (induction pq t acc rule: combine_paths_aux.induct)
       case False
       then show ?thesis
         using Prems Some \<open>r = _\<close>
-        by - (rule sym, auto simp add: combine_paths_aux.simps filter_mset_eq_conv dest!: top_Min_target)
+        by - (rule sym,
+              auto simp: combine_paths_aux.simps filter_mset_eq_conv dest!: top_Min_target)
     qed
   qed
 qed
 
 lemma combine_paths_consumes_all_top:
-  assumes \<open>top pq = Some r\<close> \<open>combine_paths pq (target r) = (s', v', pq')\<close>
+  assumes \<open>top pq = Some r\<close> \<open>combine_paths pq (target r) = (s', v', pq')\<close> \<open>pq_lb pq (target r)\<close>
   shows \<open>pq' = {# item \<in># pq . (target r) \<noteq> (target item) #}\<close>
   using assms by (auto simp del: combine_paths_aux.simps
                        simp add: combine_paths_aux_consumes_all_top)
@@ -530,15 +538,47 @@ qed
 
 lemma combine_paths_auxE:
   obtains s' v' pq' where
-    \<open>combine_paths_aux pq u acc = (s', v', pq')\<close>
-    \<open>num_pq ns pq = num_pq ns pq' + s' * num_assignments_node v' ns u\<close>
-  sorry
+    \<open>combine_paths_aux pq u (s, v) = (s', v', pq')\<close>
+    \<open>num_pq ns pq + s * num_assignments_node v ns u = num_pq ns pq' + s' * num_assignments_node v' ns u\<close>
+proof (atomize_elim, induction pq u \<open>(s,v)\<close> arbitrary: s v rule: combine_paths_aux.induct)
+  case (1 pq t s v)
+  note IH = 1
+  note [simp del] = combine_paths_aux.simps
+  obtain s' v' pq' where \<open>combine_paths_aux pq t (s,v) = (s', v', pq')\<close>
+    using prod_cases3 by blast
+  moreover have "num_pq ns pq + s * num_assignments_node v ns t
+               = num_pq ns pq' + s' * num_assignments_node v' ns t"
+    if 
+      "PriorityQueue.top pq = Some (Request t rs rv)" and
+      "combine_paths_aux (pq - {#Request t rs rv#}) t (s * 2 ^ (rv - v) + rs, rv) = (s', v', pq')"
+    for rs :: nat and rv :: nat
+  proof -
+    have *: \<open>num_pq ns pq = num_pq ns (pq - {#Request t rs rv#}) + num_request ns (Request t rs rv)\<close>
+    using that(1) by (metis num_pq_top_pop_split top_pop_split add_mset_remove_trivial)
+    have \<open>num_pq ns pq + s * num_assignments_node v ns t
+        = num_pq ns (pq - {#Request t rs rv#}) + (s * 2 ^ (rv - v) + rs) * num_assignments_node rv ns t\<close>
+      apply (auto simp add: * num_request_alt_def)
+
+      sorry
+    also from IH[OF that(1) refl refl refl refl] have
+      "num_pq ns (pq - {#Request t rs rv#}) + (s * 2 ^ (rv - v) + rs) * num_assignments_node rv ns t
+      = num_pq ns pq' + s' * num_assignments_node v' ns t"
+      using that(2) by auto
+      finally show ?thesis .
+  qed
+  ultimately show ?case
+    by (subst (asm) combine_paths_aux.simps,
+        subst combine_paths_aux.simps,
+        auto split: option.splits if_splits pq_item.splits)
+qed
 
 lemma combine_pathsE:
   obtains s' v' pq' where
     \<open>combine_paths pq u = (s', v', pq')\<close>
     \<open>num_pq ns pq = num_pq ns pq' + s' * num_assignments_node v' ns u\<close>
-  using combine_paths_auxE by (auto simp del: combine_paths_aux.simps) blast
+    using combine_paths_auxE
+  by (metis add.right_neutral combine_paths.simps mult_zero_left)
+
 
 subsubsection \<open>Correctness of @{term forward_paths}}\<close>
 
